@@ -8,13 +8,13 @@ import (
 )
 
 // Creating a Course
-func Create_course(db *sql.DB, owner_id int, url, title string) (int, bool, error) {
+func Create_course(tx *sql.Tx, owner_id int, url, title string) (int, bool, error) {
 	query := "INSERT INTO courses(owner_id,playlist_url,title) VALUES($1,$2,$3) ON CONFLICT(playlist_url) DO NOTHING RETURNING id;"
 	var course_id int
-	err := db.QueryRow(query, owner_id, url, title).Scan(&course_id)
+	err := tx.QueryRow(query, owner_id, url, title).Scan(&course_id)
 	if err == sql.ErrNoRows {
 		fallback_query := "SELECT id FROM courses WHERE playlist_url = $1"
-		err = db.QueryRow(fallback_query, url).Scan(&course_id)
+		err = tx.QueryRow(fallback_query, url).Scan(&course_id)
 		if err != nil {
 			return 0, false, err // Safety check in case fallback fails
 		}

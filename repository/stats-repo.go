@@ -22,13 +22,26 @@ func Points_update(tx *sql.Tx, userID, pointsToAdd int) error {
 func Streak_update(tx *sql.Tx, userID int) error {
 	query := `UPDATE user_stats 
 	SET streak_count=CASE
-	WHEN CURRENT_DATE-last_active_date::DATE+1 THEN streak_count + 1
+	WHEN CURRENT_DATE - last_active_date::DATE = 1 THEN streak_count + 1
 	WHEN CURRENT_DATE - last_active_date::DATE > 1 THEN 1
 	ELSE streak_count 
     END,
 	last_active_date=CURRENT_DATE
 	WHERE user_id = $1`
 	_, err := tx.Exec(query, userID)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func Update_progress(tx *sql.Tx, userID, courseID, newPercentage int) error {
+	query := `UPDATE user_progress 
+              SET completion_percentage = $1, 
+                  last_accessed_at = CURRENT_TIMESTAMP 
+              WHERE user_id = $2 AND course_id = $3`
+
+	_, err := tx.Exec(query, newPercentage, userID, courseID)
 	if err != nil {
 		return err
 	}

@@ -28,20 +28,20 @@ func main() {
 	fmt.Println("🚀 Successfully connected to the PostgreSQL database!")
 
 	//Start of transaction
-	tx, err := db.Begin()
+	tx1, err := db.Begin()
 	if err != nil {
 		log.Fatalf("Failed to Start transaction: %v", err)
 	}
-	defer tx.Rollback()
+	defer tx1.Rollback()
 
 	//CREATING USER
-	user_id, isNewUser, err := repository.Create_user(tx, "Debandhu_Mukherjee", "debandhumukherjee56@gmail.com")
+	user_id, isNewUser, err := repository.Create_user(tx1, "Debandhu_Mukherjee", "debandhumukherjee56@gmail.com")
 	if err != nil {
 		log.Fatalf("Failed to create user: %v", err)
 	}
 	if isNewUser {
 		fmt.Printf("👤 New user created successfully! User ID: %d\n", user_id)
-		err = repository.InitUserStats(tx, user_id)
+		err = repository.InitUserStats(tx1, user_id)
 		if err != nil {
 			log.Fatalf("Error Gamifying Experience : %v", err)
 		} else {
@@ -51,7 +51,7 @@ func main() {
 	} else {
 		fmt.Printf("👤 User already exists! User ID: %d\n", user_id)
 	}
-	err = tx.Commit()
+	err = tx1.Commit()
 	if err != nil {
 		log.Fatalf("Failed to commit transaction: %v", err)
 	}
@@ -59,7 +59,15 @@ func main() {
 	fmt.Println("✅ User and Stats successfully saved to the database!")
 
 	//CREATING COURSE FK USER
-	course_id, isNewCourse, err := repository.Create_course(db, user_id, "https://youtube.com/playlist?list=ML_VIEW_984", "How to win an election")
+
+	//Start of transaction
+	tx2, err := db.Begin()
+	if err != nil {
+		log.Fatalf("Failed to Start transaction: %v", err)
+	}
+	defer tx2.Rollback()
+
+	course_id, isNewCourse, err := repository.Create_course(tx2, user_id, "https://youtube.com/playlist?list=ML_VIEW_984", "How to win an election")
 	if err != nil {
 		log.Fatalf("Failed to create course: %v", err)
 	}
@@ -67,6 +75,10 @@ func main() {
 		fmt.Printf("📚 New course created successfully! Course ID: %d\n", course_id)
 	} else {
 		fmt.Printf("📚 Course already exists! Course ID: %d\n", course_id)
+	}
+	err = tx2.Commit()
+	if err != nil {
+		log.Fatalf("Failed to commit transaction: %v", err)
 	}
 
 	//DELETING USERS

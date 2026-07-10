@@ -1,6 +1,8 @@
 package models
 
-import "time"
+import (
+	"time"
+)
 
 type User_stats struct {
 	User_id          int
@@ -25,4 +27,15 @@ type Progress_data struct {
 	Completion_percent int
 	Started_At         time.Time
 	Last_accessed_date time.Time
+}
+
+type CreateUserRequest struct {
+	Username string `json:"username"`
+	Email    string `json:"email"`
+}
+
+type CourseCreationRequest struct {
+	UserID int    `json:"user_id"`
+	URL    string `json:"url"`
+	Title  string `json:"title"`
 }
