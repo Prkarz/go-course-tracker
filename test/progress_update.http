@@ -2,7 +2,7 @@ POST http://localhost:8080/courses/progress
 Content-Type: application/json
 
 {
-    "user_id": 18,
-    "course_id": 19,
+    "user_id": 21,
+    "course_id": 23,
     "percentage_to_add": 25
 }

@@ -54,11 +54,7 @@ func (s *APIServer) Points_Streak_toUpdate_Handler(w http.ResponseWriter, r *htt
 		http.Error(w, "Unable to  Update Points", http.StatusInternalServerError)
 		return
 	}
-	err = repository.Streak_update(tx, req.UserID)
-	if err != nil {
-		http.Error(w, "Unable to  Update streak", http.StatusInternalServerError)
-		return
-	}
+
 	if req.IsFirstActionToday {
 		err = repository.Streak_update(tx, req.UserID)
 		if err != nil {

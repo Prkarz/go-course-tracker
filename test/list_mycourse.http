@@ -1,0 +1,5 @@
+POST http://localhost:8080/courses/mycourses
+
+{
+    "user_id":21
+}

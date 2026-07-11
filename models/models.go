@@ -58,9 +58,9 @@ type UpdateProgress struct {
 }
 
 type PointsTOUpdate struct {
-	UserID             int `json:"user_id"`
-	PointstoAdd        int `json:"points_to_add"`
-	IsFirstActionToday bool
+	UserID             int  `json:"user_id"`
+	PointstoAdd        int  `json:"points_to_add"`
+	IsFirstActionToday bool `json:"is_first_action_today"`
 }
 
 type DeleteUserRequest struct {

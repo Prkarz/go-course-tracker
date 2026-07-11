@@ -1,0 +1,7 @@
+POST http://localhost:8080/courses/points
+
+{
+    "user_id":21,
+    "points_to_add":12,
+    "is_first_action_today": true
+}
