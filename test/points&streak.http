@@ -1,4 +1,5 @@
 POST http://localhost:8080/courses/points
+Content-Type: application/json
 
 {
     "user_id":21,

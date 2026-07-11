@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"errors"
+	"log"
 )
 
 // InitUserStats initializes the user stats for a newly created user.
@@ -19,15 +20,24 @@ func InitUserStats(tx *sql.Tx, userID int) error {
 // The function updates the total points and optionally updates the streak count based on the last active date.
 func Points_update(tx *sql.Tx, userID, pointsToAdd int) error {
 	query := `UPDATE user_stats 
-	SET total_points = total_points + $1 WHERE user_id = $2
-	AND EXISTS (
+    SET total_points = COALESCE(total_points, 0) + $1 
+    WHERE user_id = $2
+    AND EXISTS (
         SELECT 1 FROM users 
-        WHERE users.id = $1 
+        WHERE users.id = $2 
         AND users.deleted_at IS NULL
     )`
-	_, err := tx.Exec(query, pointsToAdd, userID)
+	log.Printf("DB EXECUTE - UserID: %d | Points to add: %d", userID, pointsToAdd)
+	result, err := tx.Exec(query, pointsToAdd, userID)
 	if err != nil {
 		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return errors.New("blocked: user is deleted or does not exist")
 	}
 	return nil
 }
@@ -37,13 +47,21 @@ func Points_update(tx *sql.Tx, userID, pointsToAdd int) error {
 // The last active date is updated to the current date.
 func Streak_update(tx *sql.Tx, userID int) error {
 	query := `UPDATE user_stats 
-	SET streak_count=CASE
-	WHEN CURRENT_DATE - last_active_date::DATE = 1 THEN streak_count + 1
-	WHEN CURRENT_DATE - last_active_date::DATE > 1 THEN 1
-	ELSE streak_count 
+    SET streak_count = CASE
+        -- 1. First time ever? Start at 1
+        WHEN last_active_date IS NULL THEN 1 
+        
+        -- 2. Logged in yesterday? Increment it
+        WHEN CURRENT_DATE - last_active_date::DATE = 1 THEN COALESCE(streak_count, 0) + 1 
+        
+        -- 3. Missed a day? Reset to 1
+        WHEN CURRENT_DATE - last_active_date::DATE > 1 THEN 1 
+        
+        -- 4. Same day login? Keep current streak, but ensure it's at least 1 (not 0)
+        ELSE COALESCE(NULLIF(streak_count, 0), 1)
     END,
-	last_active_date=CURRENT_DATE
-	WHERE user_id = $1 AND EXISTS (
+    last_active_date = CURRENT_DATE
+    WHERE user_id = $1 AND EXISTS (
         SELECT 1 FROM users 
         WHERE users.id = $1 
         AND users.deleted_at IS NULL
@@ -78,7 +96,7 @@ func Update_progress(tx *sql.Tx, userID, courseID, newPercentage int) error {
 		return err // Error retrieving the affected row count
 	}
 	if rowsAffected == 0 {
-		return errors.New("no progress record found: has the user started this course?")
+		return errors.New("blocked: user is deleted or does not exist")
 	}
 	return nil
 }

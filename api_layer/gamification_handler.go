@@ -2,7 +2,6 @@ package apilayer
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 
 	"github.com/Prkarz/course-tracker/models"
@@ -12,7 +11,7 @@ import (
 func (s *APIServer) Update_progress_Handler(w http.ResponseWriter, r *http.Request) {
 	var req models.UpdateProgress
 	err := json.NewDecoder(r.Body).Decode(&req)
-	log.Printf("DEBUG: Received UserID: %d, CourseID: %d, NewPercentage: %d", req.UserID, req.CourseID, req.NewPercentage)
+
 	if err != nil {
 		http.Error(w, "Unable to Decode File", http.StatusBadRequest)
 		return
@@ -25,7 +24,7 @@ func (s *APIServer) Update_progress_Handler(w http.ResponseWriter, r *http.Reque
 	defer tx.Rollback()
 	err = repository.Update_progress(tx, req.UserID, req.CourseID, req.NewPercentage)
 	if err != nil {
-		http.Error(w, "Receiver Progress", http.StatusInternalServerError)
+		http.Error(w, "USER doesnot Exist", http.StatusInternalServerError)
 		return
 	}
 	err = tx.Commit()

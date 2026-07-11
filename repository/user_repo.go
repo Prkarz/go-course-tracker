@@ -35,12 +35,12 @@ func Delete_user_by_id(tx *sql.Tx, userId int) error {
 	if err != nil {
 		return err
 	}
-	row_affecred, err := result.RowsAffected()
+	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		return err
 	}
-	if row_affecred == 0 {
-		return errors.New("USER Already Deleted Or Not Found")
+	if rowsAffected == 0 {
+		return errors.New("blocked: user is deleted or does not exist")
 	}
 	return nil
 }
