@@ -78,3 +78,18 @@ func (s *APIServer) User_delete_Handler(w http.ResponseWriter, r *http.Request) 
 	}
 	w.Write([]byte("User Profile successfully deleted!"))
 }
+
+func (s *APIServer) List_myCourses_Handler(w http.ResponseWriter, r *http.Request) {
+	var req models.ListMyCourses
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, "Couldn't Fetch USER's Courses", http.StatusBadRequest)
+		return
+	}
+	reports, err := repository.List_my_courses(s.DB, req.UserID)
+	if err != nil {
+		http.Error(w, "Couldn't Fetch USER's Courses", http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(reports)
+}

@@ -1,0 +1,7 @@
+POST http://localhost:8080/courses/start
+Content-Type: application/json
+
+{
+    "user_id": 21,
+    "course_id": 23
+}

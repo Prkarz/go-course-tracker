@@ -47,22 +47,27 @@ type CourseCreationRequest struct {
 }
 
 type StartCourseRequest struct {
-	UserID   int
-	CourseID int
+	UserID   int `json:"user_id"`
+	CourseID int `json:"course_id"`
 }
 
 type UpdateProgress struct {
-	UserID        int
-	CourseID      int
-	NewPercentage int
+	UserID        int `json:"user_id"`
+	CourseID      int `json:"course_id"`
+	NewPercentage int `json:"percentage_to_add"`
 }
 
 type PointsTOUpdate struct {
-	UserID             int
-	PointstoAdd        int
+	UserID             int `json:"user_id"`
+	PointstoAdd        int `json:"points_to_add"`
 	IsFirstActionToday bool
 }
 
 type DeleteUserRequest struct {
-	UserID int
+	UserID    int `json:"user_id"`
+	DeletedAt *time.Time
+}
+
+type ListMyCourses struct {
+	UserID int `json:"user_id"`
 }

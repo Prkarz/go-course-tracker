@@ -1,0 +1,8 @@
+POST http://localhost:8080/courses/create
+Content-Type: application/json
+
+{
+    "user_id": 21,
+    "url": "https://www.youtube.com/watch?v=n1VUnHD62r0",
+    "title": "The 20 Minute Masterpiece: Dijkstra's Algorithm"
+}

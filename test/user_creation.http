@@ -1,0 +1,7 @@
+POST http://localhost:8080/users/create
+Content-Type: application/json
+
+{
+    "username": "Debandhu_Mukherjee",
+    "email": "debandhumukherjee56@gmail.com"
+}

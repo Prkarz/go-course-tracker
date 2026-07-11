@@ -30,10 +30,13 @@ func Create_course(tx *sql.Tx, owner_id int, url, title string) (int, bool, erro
 }
 
 // List of all Courses
-func List_my_courses(db *sql.DB) ([]models.Course_data, error) {
+func List_my_courses(db *sql.DB, userID int) ([]models.Course_data, error) {
 	var reports []models.Course_data
-	query := "SELECT users.id,courses.owner_id,users.username,users.email,courses.playlist_url,courses.title FROM users LEFT JOIN courses ON users.id=courses.owner_id;"
-	rows, err := db.Query(query)
+	query := `SELECT users.id, courses.owner_id, users.username, users.email, courses.playlist_url, courses.title 
+              FROM users
+              LEFT JOIN courses ON users.id = courses.owner_id
+              WHERE users.id = $1 AND users.deleted_at IS NULL;`
+	rows, err := db.Query(query, userID)
 	if err != nil {
 		return nil, err
 	}

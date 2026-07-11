@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"errors"
 )
 
 // InitUserStats initializes the user stats for a newly created user.
@@ -17,7 +18,13 @@ func InitUserStats(tx *sql.Tx, userID int) error {
 // It takes the user ID, points to add, and a boolean indicating whether to update the streak.
 // The function updates the total points and optionally updates the streak count based on the last active date.
 func Points_update(tx *sql.Tx, userID, pointsToAdd int) error {
-	query := "UPDATE user_stats SET total_points = total_points + $1 WHERE user_id = $2"
+	query := `UPDATE user_stats 
+	SET total_points = total_points + $1 WHERE user_id = $2
+	AND EXISTS (
+        SELECT 1 FROM users 
+        WHERE users.id = $1 
+        AND users.deleted_at IS NULL
+    )`
 	_, err := tx.Exec(query, pointsToAdd, userID)
 	if err != nil {
 		return err
@@ -36,7 +43,11 @@ func Streak_update(tx *sql.Tx, userID int) error {
 	ELSE streak_count 
     END,
 	last_active_date=CURRENT_DATE
-	WHERE user_id = $1`
+	WHERE user_id = $1 AND EXISTS (
+        SELECT 1 FROM users 
+        WHERE users.id = $1 
+        AND users.deleted_at IS NULL
+    )`
 	_, err := tx.Exec(query, userID)
 	if err != nil {
 		return err
@@ -49,13 +60,25 @@ func Streak_update(tx *sql.Tx, userID int) error {
 // The function updates the corresponding record in the user_progress table.
 func Update_progress(tx *sql.Tx, userID, courseID, newPercentage int) error {
 	query := `UPDATE user_progress 
-              SET completion_percentage = $1, 
+              SET completion_percentage = COALESCE(completion_percentage, 0) + $1, 
                   last_accessed_at = CURRENT_TIMESTAMP 
-              WHERE user_id = $2 AND course_id = $3`
+              WHERE user_id = $2 AND course_id = $3 
+			  AND EXISTS (
+        SELECT 1 FROM users 
+        WHERE users.id = $2 
+        AND users.deleted_at IS NULL
+    )`
 
-	_, err := tx.Exec(query, newPercentage, userID, courseID)
+	result, err := tx.Exec(query, newPercentage, userID, courseID)
 	if err != nil {
 		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err // Error retrieving the affected row count
+	}
+	if rowsAffected == 0 {
+		return errors.New("no progress record found: has the user started this course?")
 	}
 	return nil
 }

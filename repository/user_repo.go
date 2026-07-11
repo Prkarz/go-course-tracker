@@ -30,7 +30,7 @@ func Create_user(tx *sql.Tx, username, email string) (int, bool, error) {
 
 // RowsAffected is used to determine how many rows were affected by the delete operation.
 func Delete_user_by_id(tx *sql.Tx, userId int) error {
-	query := "DELETE FROM users Where id=$1;"
+	query := "Update users SET deleted_at=CURRENT_TIMESTAMP Where id=$1 AND deleted_at IS NULL;"
 	result, err := tx.Exec(query, userId)
 	if err != nil {
 		return err
@@ -40,7 +40,7 @@ func Delete_user_by_id(tx *sql.Tx, userId int) error {
 		return err
 	}
 	if row_affecred == 0 {
-		return errors.New("USER NOT FOUND")
+		return errors.New("USER Already Deleted Or Not Found")
 	}
 	return nil
 }
