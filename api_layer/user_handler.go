@@ -3,9 +3,11 @@ package apilayer
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/Prkarz/course-tracker/models"
 	"github.com/Prkarz/course-tracker/repository"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 // User_creation function handles the creation of a new user.
@@ -51,6 +53,34 @@ func (s *APIServer) User_creation_Handler(w http.ResponseWriter, r *http.Request
 	w.Write([]byte("User successfully created!"))
 	//write is used to send a success message back to the client indicating that the user was successfully created.
 
+}
+
+func (s *APIServer) User_Login_Handler(w http.ResponseWriter, r *http.Request) {
+	var req models.LoginUserRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, "Couldnot Decode Request", http.StatusInternalServerError)
+		return
+	}
+	userID, err := repository.Login_User_byemail(s.DB, req.Email)
+	if err != nil {
+		http.Error(w, "Inavlid creds", http.StatusUnauthorized)
+		return
+	}
+
+	secret_key := []byte("course-tracker-super-secret-key")
+	claims := jwt.MapClaims{
+		"user_id": userID,
+		"exp":     time.Now().Add(time.Hour * 24).Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	tokenString, err := token.SignedString(secret_key)
+	if err != nil {
+		http.Error(w, "Failed to forge token", http.StatusBadRequest)
+		return
+	}
+	w.Write([]byte(tokenString))
 }
 
 func (s *APIServer) User_delete_Handler(w http.ResponseWriter, r *http.Request) {

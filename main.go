@@ -32,6 +32,7 @@ func main() {
 	mux := http.NewServeMux()
 	//Administration Routes
 	mux.HandleFunc("POST /users/create", server.User_creation_Handler)
+	mux.HandleFunc("POST /users/login", server.User_Login_Handler)
 	mux.HandleFunc("POST /courses/create", server.Course_Creation_Handler)
 	mux.HandleFunc("POST /users/delete", server.User_delete_Handler)
 	// Course & Gamification Routes

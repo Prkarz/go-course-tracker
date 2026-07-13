@@ -44,3 +44,18 @@ func Delete_user_by_id(tx *sql.Tx, userId int) error {
 	}
 	return nil
 }
+
+func Login_User_byemail(db *sql.DB, email string) (int, error) {
+	var resultID int
+	query := `SELECT id FROM users
+	        WHERE email=$1 AND deleted_at IS NULL `
+
+	err := db.QueryRow(query, email).Scan(&resultID)
+	if err != sql.ErrNoRows {
+		return 0, errors.New("invalid credentials")
+	}
+	if err != nil {
+		return 0, err
+	}
+	return resultID, nil
+}

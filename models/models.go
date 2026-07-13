@@ -71,3 +71,7 @@ type DeleteUserRequest struct {
 type ListMyCourses struct {
 	UserID int `json:"user_id"`
 }
+
+type LoginUserRequest struct {
+	Email string `json:"email"`
+}
