@@ -1,6 +1,7 @@
 package apilayer
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -10,6 +11,7 @@ import (
 
 func (s *APIServer) Course_Creation_Handler(w http.ResponseWriter, r *http.Request) {
 	var req models.CourseCreationRequest
+	OwnerID := r.Context().Value("UserID").(int)
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		http.Error(w, "Couldn't create Course", http.StatusBadRequest)
@@ -23,7 +25,7 @@ func (s *APIServer) Course_Creation_Handler(w http.ResponseWriter, r *http.Reque
 	}
 	defer tx.Rollback()
 
-	_, _, err = repository.Create_course(tx, req.OwnerID, req.URL, req.Title)
+	_, _, err = repository.Create_course(tx, OwnerID, req.URL, req.Title)
 	if err != nil {
 		http.Error(w, "SERVER ERROR", http.StatusInternalServerError)
 		return
@@ -39,6 +41,9 @@ func (s *APIServer) Course_Creation_Handler(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *APIServer) Start_Course_Handler(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value("userID").(int)
+	contxt, cancel := context.WithTimeout(r.Context(), http.DefaultClient.Timeout)
+	defer cancel()
 	var req models.StartCourseRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
@@ -51,7 +56,7 @@ func (s *APIServer) Start_Course_Handler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	defer tx.Rollback()
-	err = repository.Start_course(tx, req.UserID, req.CourseID)
+	err = repository.Start_course(contxt, tx, userID, req.CourseID)
 	if err != nil {
 		http.Error(w, "Unable to Start Course", http.StatusInternalServerError)
 		return

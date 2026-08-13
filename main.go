@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/Prkarz/course-tracker/middleWare"
+
 	apilayer "github.com/Prkarz/course-tracker/api_layer"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
@@ -33,13 +35,13 @@ func main() {
 	//Administration Routes
 	mux.HandleFunc("POST /users/create", server.User_creation_Handler)
 	mux.HandleFunc("POST /users/login", server.User_Login_Handler)
-	mux.HandleFunc("POST /courses/create", server.Course_Creation_Handler)
-	mux.HandleFunc("POST /users/delete", server.User_delete_Handler)
+	mux.HandleFunc("POST /courses/create", middleWare.JWT_Middleware(server.Course_Creation_Handler))
+	mux.HandleFunc("POST /users/delete", middleWare.JWT_Middleware(server.User_delete_Handler))
 	// Course & Gamification Routes
-	mux.HandleFunc("POST /courses/mycourses", server.List_myCourses_Handler)
-	mux.HandleFunc("POST /courses/start", server.Start_Course_Handler)
-	mux.HandleFunc("POST /courses/points", server.Points_Streak_toUpdate_Handler)
-	mux.HandleFunc("POST /courses/progress", server.Update_progress_Handler)
+	mux.HandleFunc("POST /courses/mycourses", middleWare.JWT_Middleware(server.List_myCourses_Handler))
+	mux.HandleFunc("POST /courses/start", middleWare.JWT_Middleware(server.Start_Course_Handler))
+	mux.HandleFunc("POST /courses/points", middleWare.JWT_Middleware(server.Points_Streak_toUpdate_Handler))
+	mux.HandleFunc("POST /courses/progress", middleWare.JWT_Middleware(server.Update_progress_Handler))
 
 	fmt.Println("🌐 Server is running on port 8080...")
 	http.ListenAndServe(":8080", mux)

@@ -51,7 +51,7 @@ func Login_User_byemail(db *sql.DB, email string) (int, error) {
 	        WHERE email=$1 AND deleted_at IS NULL `
 
 	err := db.QueryRow(query, email).Scan(&resultID)
-	if err != sql.ErrNoRows {
+	if err == sql.ErrNoRows {
 		return 0, errors.New("invalid credentials")
 	}
 	if err != nil {

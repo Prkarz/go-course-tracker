@@ -10,6 +10,7 @@ import (
 
 func (s *APIServer) Update_progress_Handler(w http.ResponseWriter, r *http.Request) {
 	var req models.UpdateProgress
+	userID := r.Context().Value("userID").(int)
 	err := json.NewDecoder(r.Body).Decode(&req)
 
 	if err != nil {
@@ -22,7 +23,7 @@ func (s *APIServer) Update_progress_Handler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	defer tx.Rollback()
-	err = repository.Update_progress(tx, req.UserID, req.CourseID, req.NewPercentage)
+	err = repository.Update_progress(tx, userID, req.CourseID, req.NewPercentage)
 	if err != nil {
 		http.Error(w, "USER doesnot Exist", http.StatusInternalServerError)
 		return
@@ -37,6 +38,7 @@ func (s *APIServer) Update_progress_Handler(w http.ResponseWriter, r *http.Reque
 
 func (s *APIServer) Points_Streak_toUpdate_Handler(w http.ResponseWriter, r *http.Request) {
 	var req models.PointsTOUpdate
+	userID := r.Context().Value("userID").(int)
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		http.Error(w, "Unable to Decode File", http.StatusBadRequest)
@@ -48,14 +50,14 @@ func (s *APIServer) Points_Streak_toUpdate_Handler(w http.ResponseWriter, r *htt
 		return
 	}
 	defer tx.Rollback()
-	err = repository.Points_update(tx, req.UserID, req.PointstoAdd)
+	err = repository.Points_update(tx, userID, req.PointstoAdd)
 	if err != nil {
 		http.Error(w, "Unable to  Update Points", http.StatusInternalServerError)
 		return
 	}
 
 	if req.IsFirstActionToday {
-		err = repository.Streak_update(tx, req.UserID)
+		err = repository.Streak_update(tx, userID)
 		if err != nil {
 			http.Error(w, "Unable to Update Streak", http.StatusInternalServerError)
 			return

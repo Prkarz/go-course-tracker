@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"log"
@@ -56,13 +57,14 @@ func Create_course(tx *sql.Tx, owner_id int, url, title string) (int, bool, erro
 }
 
 // List of all Courses
-func List_my_courses(db *sql.DB, userID int) ([]models.Course_data, error) {
+func List_my_courses(contxt context.Context, db *sql.DB, userID int) ([]models.Course_data, error) {
+
 	var reports []models.Course_data
 	query := `SELECT users.id, courses.owner_id, users.username, users.email, courses.playlist_url, courses.title 
               FROM users
               LEFT JOIN courses ON users.id = courses.owner_id
               WHERE users.id = $1 AND users.deleted_at IS NULL;`
-	rows, err := db.Query(query, userID)
+	rows, err := db.QueryContext(contxt, query, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -70,13 +72,31 @@ func List_my_courses(db *sql.DB, userID int) ([]models.Course_data, error) {
 	defer rows.Close()
 	for rows.Next() {
 		var item models.Course_data
-		//struct is used to hold the data for each row returned by the query.
-		//The Scan method maps the columns from the query result to the fields of the struct.
-		//When multiple users are present, the loop iterates through each row,
-		// creating a new struct instance for each user and appending it to the reports slice.
-		err := rows.Scan(&item.ID, &item.OwnerID, &item.Name, &item.Email, &item.URL, &item.Title)
+		// Use intermediate sql.Null* types for nullable DB columns, then map to pointer fields.
+		var ownerID sql.NullInt64
+		var url sql.NullString
+		var title sql.NullString
+		err := rows.Scan(&item.ID, &ownerID, &item.Name, &item.Email, &url, &title)
 		if err != nil {
 			return nil, err
+		}
+		if ownerID.Valid {
+			tmp := int(ownerID.Int64)
+			item.OwnerID = &tmp
+		} else {
+			item.OwnerID = nil
+		}
+		if url.Valid {
+			tmp := url.String
+			item.URL = &tmp
+		} else {
+			item.URL = nil
+		}
+		if title.Valid {
+			tmp := title.String
+			item.Title = &tmp
+		} else {
+			item.Title = nil
 		}
 		reports = append(reports, item)
 	}
@@ -86,7 +106,7 @@ func List_my_courses(db *sql.DB, userID int) ([]models.Course_data, error) {
 // Starting a course
 // this function is called when a user starts a course,
 // it inserts a new record into the user_progress table with the user ID, course ID, initial completion percentage (0), and timestamps for when the course was started and last accessed.
-func Start_course(tx *sql.Tx, userID, courseID int) error {
+func Start_course(contxt context.Context, tx *sql.Tx, userID, courseID int) error {
 	current_Time := time.Now()
 
 	// Combines SELECT block and ON CONFLICT
@@ -98,7 +118,7 @@ func Start_course(tx *sql.Tx, userID, courseID int) error {
     ON CONFLICT (user_id, course_id) DO NOTHING;
     `
 
-	result, err := tx.Exec(query, userID, courseID, 0, current_Time, current_Time)
+	result, err := tx.ExecContext(contxt, query, userID, courseID, 0, current_Time, current_Time)
 	if err != nil {
 		return err
 	}

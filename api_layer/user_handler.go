@@ -1,10 +1,12 @@
 package apilayer
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
 
+	"github.com/Prkarz/course-tracker/config"
 	"github.com/Prkarz/course-tracker/models"
 	"github.com/Prkarz/course-tracker/repository"
 	"github.com/golang-jwt/jwt/v5"
@@ -68,7 +70,7 @@ func (s *APIServer) User_Login_Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	secret_key := []byte("course-tracker-super-secret-key")
+	secret_key := config.JWTSecret
 	claims := jwt.MapClaims{
 		"user_id": userID,
 		"exp":     time.Now().Add(time.Hour * 24).Unix(),
@@ -85,6 +87,7 @@ func (s *APIServer) User_Login_Handler(w http.ResponseWriter, r *http.Request) {
 
 func (s *APIServer) User_delete_Handler(w http.ResponseWriter, r *http.Request) {
 	var req models.DeleteUserRequest
+	UserID := r.Context().Value("userID").(int)
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		http.Error(w, "Couldn't delete USER", http.StatusBadRequest)
@@ -96,7 +99,7 @@ func (s *APIServer) User_delete_Handler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	defer tx.Rollback()
-	err = repository.Delete_user_by_id(tx, req.UserID)
+	err = repository.Delete_user_by_id(tx, UserID)
 	if err != nil {
 		http.Error(w, "SERVER ERROR", http.StatusInternalServerError)
 		return
@@ -110,13 +113,10 @@ func (s *APIServer) User_delete_Handler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *APIServer) List_myCourses_Handler(w http.ResponseWriter, r *http.Request) {
-	var req models.ListMyCourses
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		http.Error(w, "Couldn't Fetch USER's Courses", http.StatusBadRequest)
-		return
-	}
-	reports, err := repository.List_my_courses(s.DB, req.UserID)
+	contxt, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+	UserID := r.Context().Value("userID").(int)
+	reports, err := repository.List_my_courses(contxt, s.DB, UserID)
 	if err != nil {
 		http.Error(w, "Couldn't Fetch USER's Courses", http.StatusInternalServerError)
 		return
