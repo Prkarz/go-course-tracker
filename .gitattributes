@@ -1,0 +1,6 @@
+# Normalize text files and ensure Go uses LF
+* text=auto
+*.go text eol=lf
+*.mod text eol=lf
+*.sum text eol=lf
+README.md text eol=lf
