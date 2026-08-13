@@ -9,6 +9,7 @@ import (
 	"github.com/Prkarz/course-tracker/config"
 	"github.com/Prkarz/course-tracker/models"
 	"github.com/Prkarz/course-tracker/repository"
+	"github.com/Prkarz/course-tracker/service"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -35,7 +36,7 @@ func (s *APIServer) User_creation_Handler(w http.ResponseWriter, r *http.Request
 	}
 	defer tx.Rollback()
 
-	userID, isNewUser, err := repository.Create_user(tx, req.Username, req.Email)
+	userID, isNewUser, err := service.Register_user(tx, req.Username, req.Email, req.Password)
 	if err != nil {
 		http.Error(w, "SERVER ERROR", http.StatusInternalServerError)
 		return
@@ -64,12 +65,11 @@ func (s *APIServer) User_Login_Handler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Couldnot Decode Request", http.StatusInternalServerError)
 		return
 	}
-	userID, err := repository.Login_User_byemail(s.DB, req.Email)
+	userID, err := service.LoginUser(s.DB, req.Email, req.Password)
 	if err != nil {
 		http.Error(w, "Inavlid creds", http.StatusUnauthorized)
 		return
 	}
-
 	secret_key := config.JWTSecret
 	claims := jwt.MapClaims{
 		"user_id": userID,

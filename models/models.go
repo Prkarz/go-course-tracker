@@ -35,6 +35,7 @@ type Progress_data struct {
 type CreateUserRequest struct {
 	Username string `json:"username"`
 	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
 // CourseCreationRequest struct is used to represent the request payload for creating a new course.
@@ -62,5 +63,6 @@ type DeleteUserRequest struct {
 }
 
 type LoginUserRequest struct {
-	Email string `json:"email"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
