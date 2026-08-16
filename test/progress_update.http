@@ -1,8 +1,8 @@
 POST http://localhost:8080/courses/progress
 Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3ODY4ODYwMDYsInVzZXJfaWQiOjI1fQ.6KLXEmfm-uJS8reaiJDLsMjXqZHin7jjlDDy-LcR5ho
 
 {
-    "user_id": 21,
-    "course_id": 23,
+    "course_id": 27,
     "percentage_to_add": 25
 }

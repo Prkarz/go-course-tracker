@@ -1,6 +1,2 @@
 POST http://localhost:8080/users/delete
-Content-Type: application/json
-
-{
-    "user_id": 21
-}
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3ODY4ODcyNDksInVzZXJfaWQiOjI1fQ.-C11oP8pCxneHBJZPD2AEUXjYOshUCfJa3X_h0P2VjQ

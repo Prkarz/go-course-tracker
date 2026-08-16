@@ -1,8 +1,8 @@
 POST http://localhost:8080/courses/create
 Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3ODY4ODcyNDksInVzZXJfaWQiOjI1fQ.-C11oP8pCxneHBJZPD2AEUXjYOshUCfJa3X_h0P2VjQ
 
 {
-    "user_id": 21,
-    "url": "https://www.youtube.com/watch?v=n1VUnHD62r0",
+    "url": "https://www.youtube.com/watch?v=n2VUnHD62r0",
     "title": "The 20 Minute Masterpiece: Dijkstra's Algorithm"
 }

@@ -89,14 +89,14 @@ func Update_progress(tx *sql.Tx, userID, courseID, newPercentage int) error {
 
 	result, err := tx.Exec(query, newPercentage, userID, courseID)
 	if err != nil {
-		return err
+		return errors.New("Problem in .tx")
 	}
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		return err // Error retrieving the affected row count
 	}
 	if rowsAffected == 0 {
-		return errors.New("blocked: user is deleted or does not exist")
+		return errors.New("No progress rows exists yet")
 	}
 	return nil
 }

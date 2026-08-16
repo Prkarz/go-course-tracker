@@ -12,9 +12,18 @@ import (
 
 // Creating a Course
 func Create_course(tx *sql.Tx, owner_id int, url, title string) (int, bool, error) {
-	// 1. The Correct Ghost-Proof Insert for COURSES
+
+	var isUserActive bool
+	err := tx.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND deleted_at IS NULL)", owner_id).Scan(&isUserActive)
+	if err != nil {
+		return 0, false, err
+	}
+	if !isUserActive {
+		// If they are deleted, kick them out IMMEDIATELY before doing anything else!
+		return 0, false, errors.New("blocked: course creator is deleted or does not exist")
+	}
 	query := `
-    INSERT INTO courses (created_by, playlist_url, title)
+    INSERT INTO courses (owner_id, playlist_url, title)
     SELECT $1, $2, $3
     FROM users 
     WHERE id = $1 AND deleted_at IS NULL
@@ -23,7 +32,7 @@ func Create_course(tx *sql.Tx, owner_id int, url, title string) (int, bool, erro
     `
 
 	var course_id int
-	err := tx.QueryRow(query, owner_id, url, title).Scan(&course_id)
+	err = tx.QueryRow(query, owner_id, url, title).Scan(&course_id)
 
 	if err == sql.ErrNoRows {
 		// In this specific query, ErrNoRows happens for ONE of TWO reasons:
@@ -31,7 +40,7 @@ func Create_course(tx *sql.Tx, owner_id int, url, title string) (int, bool, erro
 		// Reason B: The SELECT returned nothing (The user is deleted/doesn't exist)
 
 		// Let's check Reason A first by looking for the URL:
-		fallback_query := "SELECT id FROM courses WHERE playlist_url = $1"
+		fallback_query := "SELECT id FROM courses WHERE playlist_url = $1  "
 		err = tx.QueryRow(fallback_query, url).Scan(&course_id)
 
 		if err == nil {
@@ -109,14 +118,29 @@ func List_my_courses(contxt context.Context, db *sql.DB, userID int) ([]models.C
 func Start_course(contxt context.Context, tx *sql.Tx, userID, courseID int) error {
 	current_Time := time.Now()
 
-	// Combines SELECT block and ON CONFLICT
+	var exists bool
+	err := tx.QueryRowContext(contxt, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM user_progress
+			WHERE user_id = $1 AND course_id = $2
+		)
+	`, userID, courseID).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if exists {
+		log.Printf("Start skipped: User %d already enrolled in Course %d", userID, courseID)
+		return errors.New("blocked: user is already enrolled in this course")
+	}
+
 	query := `
-    INSERT INTO user_progress (user_id, course_id, completion_percentage, started_at, last_accessed_at)
-    SELECT $1, $2, $3, $4, $5
-    FROM users 
-    WHERE id = $1 AND deleted_at IS NULL
-    ON CONFLICT (user_id, course_id) DO NOTHING;
-    `
+	INSERT INTO user_progress (user_id, course_id, completion_percentage, started_at, last_accessed_at)
+	SELECT $1, $2, $3, $4, $5
+	FROM users
+	WHERE id = $1 AND deleted_at IS NULL
+	AND EXISTS (SELECT 1 FROM courses WHERE id = $2 )
+	`
 
 	result, err := tx.ExecContext(contxt, query, userID, courseID, 0, current_Time, current_Time)
 	if err != nil {
@@ -132,7 +156,7 @@ func Start_course(contxt context.Context, tx *sql.Tx, userID, courseID int) erro
 	// If rows == 0, it means EITHER the user is deleted, OR they already started this course.
 	// Both are safe states, so we don't necessarily need to return a fatal server error.
 	if rows == 0 {
-		log.Printf("Start skipped: User %d is deleted or already enrolled in Course %d", userID, courseID)
+		return errors.New("blocked: user is deleted or course does not exist")
 		// You can choose to return an error here, or just return nil because the end result
 		// (the user being enrolled) is already true!
 	}

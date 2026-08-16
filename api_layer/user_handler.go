@@ -25,35 +25,36 @@ func (s *APIServer) User_creation_Handler(w http.ResponseWriter, r *http.Request
 	//decode req the request body into the req variable. If there is an error during decoding,
 	//it sends a bad request response to the client.
 	if err != nil {
-		http.Error(w, "Couldn't create USER", http.StatusBadRequest)
+		http.Error(w, "[400_INVALID_REQUEST] Failed to parse user creation request. Please check JSON payload format.", http.StatusBadRequest)
 		return
 	}
 
 	tx, err := s.DB.Begin()
 	if err != nil {
-		http.Error(w, "SERVER ERROR", http.StatusInternalServerError)
+		http.Error(w, "[500_DB_TRANSACTION_FAILED] Unable to initiate database transaction. Please try again.", http.StatusInternalServerError)
 		return
 	}
 	defer tx.Rollback()
 
 	userID, isNewUser, err := service.Register_user(tx, req.Username, req.Email, req.Password)
 	if err != nil {
-		http.Error(w, "SERVER ERROR", http.StatusInternalServerError)
+		http.Error(w, "[500_USER_REGISTRATION_FAILED] User registration failed. Email may already exist or password requirements not met.", http.StatusInternalServerError)
 		return
 	}
 	if isNewUser {
 		err := repository.InitUserStats(tx, userID)
 		if err != nil {
-			http.Error(w, "SERVER ERROR", http.StatusInternalServerError)
+			http.Error(w, "[500_USER_STATS_INIT_FAILED] Failed to initialize user statistics. Please contact support.", http.StatusInternalServerError)
 			return
 		}
 	}
 	err = tx.Commit()
 	if err != nil {
-		http.Error(w, "SERVER ERROR", http.StatusInternalServerError)
+		http.Error(w, "[500_DB_COMMIT_FAILED] Failed to commit changes to database. User registration may be incomplete.", http.StatusInternalServerError)
 		return
 	}
-	w.Write([]byte("User successfully created!"))
+	w.WriteHeader(http.StatusCreated)
+	w.Write([]byte("User account successfully created."))
 	//write is used to send a success message back to the client indicating that the user was successfully created.
 
 }
@@ -62,54 +63,48 @@ func (s *APIServer) User_Login_Handler(w http.ResponseWriter, r *http.Request) {
 	var req models.LoginUserRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		http.Error(w, "Couldnot Decode Request", http.StatusInternalServerError)
+		http.Error(w, "[400_INVALID_REQUEST] Failed to parse login request. Ensure email and password fields are provided in JSON format.", http.StatusBadRequest)
 		return
 	}
 	userID, err := service.LoginUser(s.DB, req.Email, req.Password)
 	if err != nil {
-		http.Error(w, "Inavlid creds", http.StatusUnauthorized)
+		http.Error(w, "[401_AUTH_FAILED] Authentication failed. Invalid email or password provided.", http.StatusUnauthorized)
 		return
 	}
 	secret_key := config.JWTSecret
 	claims := jwt.MapClaims{
 		"user_id": userID,
-		"exp":     time.Now().Add(time.Hour * 24).Unix(),
+		"exp":     time.Now().Add(config.JWTExpiryDuration).Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
 	tokenString, err := token.SignedString(secret_key)
 	if err != nil {
-		http.Error(w, "Failed to forge token", http.StatusBadRequest)
+		http.Error(w, "[500_TOKEN_GENERATION_FAILED] Token generation failed. Please try logging in again.", http.StatusInternalServerError)
 		return
 	}
 	w.Write([]byte(tokenString))
 }
 
 func (s *APIServer) User_delete_Handler(w http.ResponseWriter, r *http.Request) {
-	var req models.DeleteUserRequest
 	UserID := r.Context().Value("userID").(int)
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		http.Error(w, "Couldn't delete USER", http.StatusBadRequest)
-		return
-	}
 	tx, err := s.DB.Begin()
 	if err != nil {
-		http.Error(w, "SERVER ERROR", http.StatusInternalServerError)
+		http.Error(w, "[500_DB_TRANSACTION_FAILED] Unable to initiate database transaction for user deletion.", http.StatusInternalServerError)
 		return
 	}
 	defer tx.Rollback()
 	err = repository.Delete_user_by_id(tx, UserID)
 	if err != nil {
-		http.Error(w, "SERVER ERROR", http.StatusInternalServerError)
+		http.Error(w, "[500_USER_DELETE_FAILED] Failed to delete user account. Please try again or contact support.", http.StatusInternalServerError)
 		return
 	}
 	err = tx.Commit()
 	if err != nil {
-		http.Error(w, "SERVER ERROR", http.StatusInternalServerError)
+		http.Error(w, "[500_DB_COMMIT_FAILED] Failed to commit user deletion. Account may still exist.", http.StatusInternalServerError)
 		return
 	}
-	w.Write([]byte("User Profile successfully deleted!"))
+	w.Write([]byte("User account successfully deleted."))
 }
 
 func (s *APIServer) List_myCourses_Handler(w http.ResponseWriter, r *http.Request) {
@@ -118,7 +113,7 @@ func (s *APIServer) List_myCourses_Handler(w http.ResponseWriter, r *http.Reques
 	UserID := r.Context().Value("userID").(int)
 	reports, err := repository.List_my_courses(contxt, s.DB, UserID)
 	if err != nil {
-		http.Error(w, "Couldn't Fetch USER's Courses", http.StatusInternalServerError)
+		http.Error(w, "[500_FETCH_COURSES_FAILED] Failed to retrieve your courses. Database operation timeout or unavailable.", http.StatusInternalServerError)
 		return
 	}
 	json.NewEncoder(w).Encode(reports)

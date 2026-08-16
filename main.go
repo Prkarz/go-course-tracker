@@ -19,13 +19,13 @@ func main() {
 	// Open a connection to the PostgreSQL database
 	db, err := sql.Open("pgx", connStr)
 	if err != nil {
-		log.Fatalf("Error configuring the database connection:%v ", err)
+		log.Fatalf("[DB_CONFIG_ERROR] Failed to configure database connection. Check driver and connection string. Error: %v", err)
 	}
 	defer db.Close()
 	// Verify the connection to the database
 	err = db.Ping()
 	if err != nil {
-		log.Fatalf("Database connection failed! Error: %v", err)
+		log.Fatalf("[DB_CONNECTION_FAILED] Cannot connect to PostgreSQL database. Verify server is running on localhost:5432 and credentials are correct. Error: %v", err)
 	}
 	fmt.Println("🚀 Successfully connected to the PostgreSQL database!")
 

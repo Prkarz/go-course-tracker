@@ -58,10 +58,6 @@ type PointsTOUpdate struct {
 	IsFirstActionToday bool `json:"is_first_action_today"`
 }
 
-type DeleteUserRequest struct {
-	DeletedAt *time.Time
-}
-
 type LoginUserRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`

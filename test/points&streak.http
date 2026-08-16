@@ -1,8 +1,8 @@
 POST http://localhost:8080/courses/points
 Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3ODY4ODYwMDYsInVzZXJfaWQiOjI1fQ.6KLXEmfm-uJS8reaiJDLsMjXqZHin7jjlDDy-LcR5ho
 
 {
-    "user_id":21,
     "points_to_add":12,
     "is_first_action_today": true
 }
