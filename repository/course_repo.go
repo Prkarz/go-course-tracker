@@ -163,3 +163,24 @@ func Start_course(contxt context.Context, tx *sql.Tx, userID, courseID int) erro
 
 	return nil
 }
+
+func Delete_course(tx *sql.Tx, userID, CourseID int) error {
+	query := `UPDATE courses
+	            SET deleted_at=CURRENT_TIMESTAMP 
+				WHERE owner_id=$1 AND id=$2
+				`
+
+	result, err := tx.Exec(query, userID, CourseID)
+
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return errors.New("Unauthorized or course not found")
+	}
+	return nil
+}

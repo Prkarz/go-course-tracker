@@ -26,7 +26,7 @@ func Points_update(tx *sql.Tx, userID, pointsToAdd int) error {
         SELECT 1 FROM users 
         WHERE users.id = $2 
         AND users.deleted_at IS NULL
-    )`
+    ) `
 	log.Printf("DB EXECUTE - UserID: %d | Points to add: %d", userID, pointsToAdd)
 	result, err := tx.Exec(query, pointsToAdd, userID)
 	if err != nil {
@@ -78,13 +78,17 @@ func Streak_update(tx *sql.Tx, userID int) error {
 // The function updates the corresponding record in the user_progress table.
 func Update_progress(tx *sql.Tx, userID, courseID, newPercentage int) error {
 	query := `UPDATE user_progress 
-              SET completion_percentage = COALESCE(completion_percentage, 0) + $1, 
+              SET completion_percentage = LEAST(COALESCE(completion_percentage, 0) + $1,100), 
                   last_accessed_at = CURRENT_TIMESTAMP 
               WHERE user_id = $2 AND course_id = $3 
 			  AND EXISTS (
         SELECT 1 FROM users 
         WHERE users.id = $2 
         AND users.deleted_at IS NULL
+    )AND EXISTS (
+        SELECT 1 FROM courses 
+        WHERE courses.id = $3 
+        AND courses.deleted_at IS NULL
     )`
 
 	result, err := tx.Exec(query, newPercentage, userID, courseID)
