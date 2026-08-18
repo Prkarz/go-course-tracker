@@ -5,17 +5,22 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/Prkarz/course-tracker/middleWare"
 
 	apilayer "github.com/Prkarz/course-tracker/api_layer"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/joho/godotenv"
 )
 
 func main() {
-
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
 	// Database connection string
-	connStr := "postgres://postgres:10102006@localhost:5432/course_tracker?sslmode=disable"
+	connStr := os.Getenv("DB_URL")
 	// Open a connection to the PostgreSQL database
 	db, err := sql.Open("pgx", connStr)
 	if err != nil {
@@ -25,7 +30,7 @@ func main() {
 	// Verify the connection to the database
 	err = db.Ping()
 	if err != nil {
-		log.Fatalf("[DB_CONNECTION_FAILED] Cannot connect to PostgreSQL database. Verify server is running on localhost:5432 and credentials are correct. Error: %v", err)
+		log.Fatalf("[DB_CONNECTION_FAILED] Cannot connect to PostgreSQL database. Verify server is running and credentials are correct. Error: %v", err)
 	}
 	fmt.Println("🚀 Successfully connected to the PostgreSQL database!")
 
@@ -42,6 +47,11 @@ func main() {
 	mux.HandleFunc("POST /courses/start", middleWare.JWT_Middleware(server.Start_Course_Handler))
 	mux.HandleFunc("POST /courses/progress", middleWare.JWT_Middleware(server.Update_progress_Handler))
 
+	handlerWithCORS := middleWare.CORSMiddleware(mux)
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 	fmt.Println("🌐 Server is running on port 8080...")
-	http.ListenAndServe(":8080", mux)
+	log.Fatal(http.ListenAndServe(":"+port, handlerWithCORS))
 }

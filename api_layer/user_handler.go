@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/Prkarz/course-tracker/config"
@@ -71,7 +72,7 @@ func (s *APIServer) User_Login_Handler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "[401_AUTH_FAILED] Authentication failed. Invalid email or password provided.", http.StatusUnauthorized)
 		return
 	}
-	secret_key := config.JWTSecret
+	secret_key := os.Getenv("SECRET_SAUCE")
 	claims := jwt.MapClaims{
 		"user_id": userID,
 		"exp":     time.Now().Add(config.JWTExpiryDuration).Unix(),

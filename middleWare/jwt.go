@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/Prkarz/course-tracker/config"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func JWT_Middleware(next http.HandlerFunc) http.HandlerFunc {
@@ -34,7 +34,7 @@ func jwt_handler(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) 
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("unexpected signing Method")
 		}
-		return config.JWTSecret, nil
+		return config.GetJWTSecret(), nil
 	})
 	if err != nil {
 		http.Error(w, "[401_TOKEN_PARSE_FAILED] Failed to parse or validate token. Token may be expired or tampered.", http.StatusUnauthorized)
