@@ -8,8 +8,14 @@ import (
 	"github.com/Prkarz/course-tracker/repository"
 )
 
+type ProgressResponse struct {
+	Message      string `json:"message"`
+	PointsEarned int    `json:"points_earned"`
+}
+
 func (s *APIServer) Update_progress_Handler(w http.ResponseWriter, r *http.Request) {
 	var req models.UpdateProgress
+	var pointstoReward int
 	userID := r.Context().Value("userID").(int)
 	err := json.NewDecoder(r.Body).Decode(&req)
 
@@ -23,9 +29,25 @@ func (s *APIServer) Update_progress_Handler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	defer tx.Rollback()
-	err = repository.Update_progress(tx, userID, req.CourseID, req.NewPercentage)
+	progresspercentage, err := repository.Update_progress(tx, userID, req.CourseID, req.NewPercentage)
 	if err != nil {
 		http.Error(w, "[500_PROGRESS_UPDATE_FAILED] Failed to update course progress. Course not found or invalid percentage.", http.StatusInternalServerError)
+		return
+	}
+	if progresspercentage == 100.00 {
+		pointstoReward = 100
+	} else {
+		pointstoReward = 10
+	}
+	err = repository.Points_update(tx, userID, pointstoReward)
+	if err != nil {
+		http.Error(w, "COuldnot update points", http.StatusInternalServerError)
+		return
+	}
+
+	err = repository.Streak_update(tx, userID)
+	if err != nil {
+		http.Error(w, "COuldnot update streak", http.StatusInternalServerError)
 		return
 	}
 	err = tx.Commit()
@@ -33,40 +55,16 @@ func (s *APIServer) Update_progress_Handler(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "[500_DB_COMMIT_FAILED] Failed to commit progress update to database.", http.StatusInternalServerError)
 		return
 	}
-	w.Write([]byte("Progress Updated"))
-}
+	// 1. Tell the browser we are sending JSON
+	w.Header().Set("Content-Type", "application/json")
 
-func (s *APIServer) Points_Streak_toUpdate_Handler(w http.ResponseWriter, r *http.Request) {
-	var req models.PointsTOUpdate
-	userID := r.Context().Value("userID").(int)
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		http.Error(w, "[400_INVALID_REQUEST] Failed to parse points update request. Ensure pointsToAdd is provided.", http.StatusBadRequest)
-		return
-	}
-	tx, err := s.DB.Begin()
-	if err != nil {
-		http.Error(w, "[500_DB_TRANSACTION_FAILED] Unable to initiate database transaction for points update.", http.StatusInternalServerError)
-		return
-	}
-	defer tx.Rollback()
-	err = repository.Points_update(tx, userID, req.PointstoAdd)
-	if err != nil {
-		http.Error(w, "[500_POINTS_UPDATE_FAILED] Failed to update points. User not found or invalid point value.", http.StatusInternalServerError)
-		return
+	// 2. Pack the envelope
+	response := ProgressResponse{
+		Message:      "Progress Successfully Updated",
+		PointsEarned: pointstoReward,
 	}
 
-	if req.IsFirstActionToday {
-		err = repository.Streak_update(tx, userID)
-		if err != nil {
-			http.Error(w, "[500_STREAK_UPDATE_FAILED] Failed to update streak. Please try again.", http.StatusInternalServerError)
-			return
-		}
-	}
-	err = tx.Commit()
-	if err != nil {
-		http.Error(w, "[500_DB_COMMIT_FAILED] Failed to commit points and streak update to database.", http.StatusInternalServerError)
-		return
-	}
-	w.Write([]byte("Points Updated"))
+	// 3. Send it
+	json.NewEncoder(w).Encode(response)
+
 }

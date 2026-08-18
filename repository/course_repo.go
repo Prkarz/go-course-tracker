@@ -69,10 +69,15 @@ func Create_course(tx *sql.Tx, owner_id int, url, title string) (int, bool, erro
 func List_my_courses(contxt context.Context, db *sql.DB, userID int) ([]models.Course_data, error) {
 
 	var reports []models.Course_data
-	query := `SELECT users.id, courses.owner_id, users.username, users.email, courses.playlist_url, courses.title 
-              FROM users
-              LEFT JOIN courses ON users.id = courses.owner_id
-              WHERE users.id = $1 AND users.deleted_at IS NULL;`
+	query := `SELECT  
+	courses.id,
+	courses.owner_id, 
+	courses.playlist_url, 
+	courses.title,
+	COALESCE(user_progress.completion_percentage,0) AS completion_percentage 
+              FROM courses
+			  LEFT JOIN user_progress ON courses.id=user_progress.course_id AND user_progress.user_id=$1
+              WHERE courses.owner_id = $1 AND courses.deleted_at IS NULL ;`
 	rows, err := db.QueryContext(contxt, query, userID)
 	if err != nil {
 		return nil, err
@@ -82,13 +87,16 @@ func List_my_courses(contxt context.Context, db *sql.DB, userID int) ([]models.C
 	for rows.Next() {
 		var item models.Course_data
 		// Use intermediate sql.Null* types for nullable DB columns, then map to pointer fields.
+		var courseID int
 		var ownerID sql.NullInt64
 		var url sql.NullString
 		var title sql.NullString
-		err := rows.Scan(&item.ID, &ownerID, &item.Name, &item.Email, &url, &title)
+		var percentageProgress sql.NullFloat64
+		err := rows.Scan(&courseID, &ownerID, &url, &title, &percentageProgress)
 		if err != nil {
 			return nil, err
 		}
+		item.ID = courseID
 		if ownerID.Valid {
 			tmp := int(ownerID.Int64)
 			item.OwnerID = &tmp
@@ -106,6 +114,9 @@ func List_my_courses(contxt context.Context, db *sql.DB, userID int) ([]models.C
 			item.Title = &tmp
 		} else {
 			item.Title = nil
+		}
+		if percentageProgress.Valid {
+			item.CompletionPercent = percentageProgress.Float64
 		}
 		reports = append(reports, item)
 	}

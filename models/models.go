@@ -15,12 +15,11 @@ type User_stats struct {
 // It contains fields for the course ID, owner ID, name, email, URL, and title.
 // The OwnerID and URL fields are pointers to allow for null values.
 type Course_data struct {
-	ID      int     `json:"id"`
-	OwnerID *int    `json:"owner_id,omitempty"`
-	Name    string  `json:"name"`
-	Email   string  `json:"email"`
-	URL     *string `json:"url,omitempty"`
-	Title   *string `json:"title,omitempty"`
+	ID                int     `json:"id"`
+	OwnerID           *int    `json:"owner_id,omitempty"`
+	URL               *string `json:"url,omitempty"`
+	Title             *string `json:"title,omitempty"`
+	CompletionPercent float64 `json:"completion_percent"`
 }
 
 // used by the List_my_courses function to return a list of courses along with user information.
@@ -53,8 +52,8 @@ type UpdateProgress struct {
 	NewPercentage int `json:"percentage_to_add"`
 }
 
-type PointsTOUpdate struct {
-	PointstoAdd        int  `json:"points_to_add"`
+type PointsToUpdate struct {
+	PointsToAdd        int  `json:"points_to_add"`
 	IsFirstActionToday bool `json:"is_first_action_today"`
 }
 

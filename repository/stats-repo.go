@@ -76,7 +76,8 @@ func Streak_update(tx *sql.Tx, userID int) error {
 // Update_progress updates the completion percentage and last accessed date for a user's progress in a specific course.
 // It takes the user ID, course ID, and the new completion percentage as parameters.
 // The function updates the corresponding record in the user_progress table.
-func Update_progress(tx *sql.Tx, userID, courseID, newPercentage int) error {
+func Update_progress(tx *sql.Tx, userID, courseID, newPercentage int) (float64, error) {
+	var completion_percentage float64
 	query := `UPDATE user_progress 
               SET completion_percentage = LEAST(COALESCE(completion_percentage, 0) + $1,100), 
                   last_accessed_at = CURRENT_TIMESTAMP 
@@ -89,18 +90,15 @@ func Update_progress(tx *sql.Tx, userID, courseID, newPercentage int) error {
         SELECT 1 FROM courses 
         WHERE courses.id = $3 
         AND courses.deleted_at IS NULL
-    )`
+    )RETURNING completion_percentage`
 
-	result, err := tx.Exec(query, newPercentage, userID, courseID)
+	err := tx.QueryRow(query, newPercentage, userID, courseID).Scan(&completion_percentage)
+	if err == sql.ErrNoRows {
+		return 0, errors.New("No ROWS affected")
+	}
 	if err != nil {
-		return errors.New("Problem in .tx")
+		return 0, errors.New("Some other error")
 	}
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return err // Error retrieving the affected row count
-	}
-	if rowsAffected == 0 {
-		return errors.New("No progress rows exists yet")
-	}
-	return nil
+
+	return completion_percentage, nil
 }

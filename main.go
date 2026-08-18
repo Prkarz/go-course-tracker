@@ -40,7 +40,6 @@ func main() {
 	// Course & Gamification Routes
 	mux.HandleFunc("POST /courses/mycourses", middleWare.JWT_Middleware(server.List_myCourses_Handler))
 	mux.HandleFunc("POST /courses/start", middleWare.JWT_Middleware(server.Start_Course_Handler))
-	mux.HandleFunc("POST /courses/points", middleWare.JWT_Middleware(server.Points_Streak_toUpdate_Handler))
 	mux.HandleFunc("POST /courses/progress", middleWare.JWT_Middleware(server.Update_progress_Handler))
 
 	fmt.Println("🌐 Server is running on port 8080...")
