@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/Prkarz/course-tracker/models"
@@ -25,6 +27,22 @@ func (s *APIServer) Course_Creation_Handler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	defer tx.Rollback()
+
+	parsed_url, err := url.Parse(req.URL)
+	if err != nil {
+		http.Error(w, "Error parsing url", http.StatusBadRequest)
+		return
+	}
+	if !strings.Contains(parsed_url.Host, "youtube.com") && !strings.Contains(parsed_url.Host, "youtu.be") {
+		http.Error(w, "[400_INVALID_DOMAIN] Submitted link is not a valid YouTube domain.", http.StatusBadRequest)
+		return
+	}
+
+	ListID := parsed_url.Query().Get("list")
+	if ListID == "" {
+		http.Error(w, "[400_INVALID_URL] Course tracker requires a YouTube playlist link, not a single video.", http.StatusBadRequest)
+		return
+	}
 
 	courseID, _, err := repository.Create_course(tx, OwnerID, req.URL, req.Title)
 	if err != nil {
