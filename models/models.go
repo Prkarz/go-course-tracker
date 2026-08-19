@@ -61,3 +61,8 @@ type LoginUserRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
+
+type AIresponseCatcher struct {
+	Summary string   `json:"summary"`
+	Tags    []string `json:"tags"`
+}

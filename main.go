@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"os"
 
+	aiintegration "github.com/Prkarz/course-tracker/Ai_integration"
 	"github.com/Prkarz/course-tracker/middleWare"
-
 	apilayer "github.com/Prkarz/course-tracker/api_layer"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
@@ -34,7 +34,13 @@ func main() {
 	}
 	fmt.Println("🚀 Successfully connected to the PostgreSQL database!")
 
-	server := &apilayer.APIServer{DB: db}
+	client, err := aiintegration.Client_Ai_Init()
+	if err != nil {
+		log.Fatalf("[AI_CONFIG_ERROR] Failed to initialize Gemini client: %v", err)
+	}
+	
+
+	server := &apilayer.APIServer{DB: db, AIClient: client}
 
 	mux := http.NewServeMux()
 	//Administration Routes
