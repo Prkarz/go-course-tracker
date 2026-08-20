@@ -3,6 +3,7 @@ package apilayer
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -15,10 +16,18 @@ import (
 
 func (s *APIServer) Course_Creation_Handler(w http.ResponseWriter, r *http.Request) {
 	var req models.CourseCreationRequest
-	OwnerID := r.Context().Value("userID").(int)
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		http.Error(w, "[400_INVALID_REQUEST] Failed to parse course creation request. Ensure title and URL are provided.", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(req.URL) == "" {
+		req.URL = req.PlaylistURL
+	}
+	req.URL = strings.TrimSpace(req.URL)
+	req.Title = strings.TrimSpace(req.Title)
+	if req.Title == "" || req.URL == "" {
+		http.Error(w, "[400_INVALID_REQUEST] Course title and playlist URL are required.", http.StatusBadRequest)
 		return
 	}
 
@@ -27,7 +36,12 @@ func (s *APIServer) Course_Creation_Handler(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "Error parsing url", http.StatusBadRequest)
 		return
 	}
-	if !strings.Contains(parsed_url.Host, "youtube.com") && !strings.Contains(parsed_url.Host, "youtu.be") {
+	if parsed_url.Scheme != "https" && parsed_url.Scheme != "http" {
+		http.Error(w, "[400_INVALID_URL] Playlist URL must use http or https.", http.StatusBadRequest)
+		return
+	}
+	host := strings.ToLower(parsed_url.Hostname())
+	if host != "youtube.com" && !strings.HasSuffix(host, ".youtube.com") && host != "youtu.be" {
 		http.Error(w, "[400_INVALID_DOMAIN] Submitted link is not a valid YouTube domain.", http.StatusBadRequest)
 		return
 	}
@@ -36,9 +50,15 @@ func (s *APIServer) Course_Creation_Handler(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "[400_INVALID_URL] Course tracker requires a YouTube playlist link, not a single video.", http.StatusBadRequest)
 		return
 	}
+	OwnerID, ok := r.Context().Value("userID").(int)
+	if !ok || OwnerID <= 0 {
+		http.Error(w, "[401_INVALID_USER] Authenticated user is invalid.", http.StatusUnauthorized)
+		return
+	}
 
 	response, err := aiintegration.CourseInsights(r.Context(), s.AIClient, req.Title)
 	if err != nil {
+		log.Printf("course insights failed for %q: %v", req.Title, err)
 		http.Error(w, "[500_COURSE_CREATION_FAILED] Summary creation failed. ", http.StatusInternalServerError)
 		return
 	}
@@ -80,6 +100,10 @@ func (s *APIServer) Start_Course_Handler(w http.ResponseWriter, r *http.Request)
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		http.Error(w, "[400_INVALID_REQUEST] Failed to parse course start request. Ensure courseID is provided.", http.StatusBadRequest)
+		return
+	}
+	if req.CourseID <= 0 {
+		http.Error(w, "[400_INVALID_REQUEST] course_id must be a positive integer.", http.StatusBadRequest)
 		return
 	}
 	tx, err := s.DB.Begin()

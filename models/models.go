@@ -19,6 +19,8 @@ type Course_data struct {
 	OwnerID           *int    `json:"owner_id,omitempty"`
 	URL               *string `json:"url,omitempty"`
 	Title             *string `json:"title,omitempty"`
+	Summary           *string `json:"summary,omitempty"`
+	Tags              []string `json:"tags"`
 	CompletionPercent float64 `json:"completion_percent"`
 }
 
@@ -39,8 +41,9 @@ type CreateUserRequest struct {
 
 // CourseCreationRequest struct is used to represent the request payload for creating a new course.
 type CourseCreationRequest struct {
-	URL   string `json:"url"`
-	Title string `json:"title"`
+	URL         string `json:"url"`
+	PlaylistURL string `json:"playlist_url"`
+	Title       string `json:"title"`
 }
 
 type StartCourseRequest struct {
@@ -63,6 +66,6 @@ type LoginUserRequest struct {
 }
 
 type AIresponseCatcher struct {
-	Summary string   `json:"summary"`
-	Tags    []string `json:"tags"`
+	Summary string   `json:"ai_summary"`
+	Tags    []string `json:"course_tags"`
 }

@@ -23,6 +23,10 @@ func (s *APIServer) Update_progress_Handler(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "[400_INVALID_REQUEST] Failed to parse progress update request. Ensure courseID and percentage are provided.", http.StatusBadRequest)
 		return
 	}
+	if req.CourseID <= 0 || req.NewPercentage <= 0 {
+		http.Error(w, "[400_INVALID_REQUEST] course_id and a positive percentage increment are required.", http.StatusBadRequest)
+		return
+	}
 	tx, err := s.DB.Begin()
 	if err != nil {
 		http.Error(w, "[500_DB_TRANSACTION_FAILED] Unable to initiate database transaction for progress update.", http.StatusInternalServerError)

@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"log"
 	"time"
@@ -71,6 +72,8 @@ func List_my_courses(contxt context.Context, db *sql.DB, userID int) ([]models.C
 	courses.owner_id, 
 	courses.playlist_url, 
 	courses.title,
+	courses.ai_summary,
+	COALESCE(to_json(courses.course_tags), '[]'::json) AS course_tags,
 	COALESCE(user_progress.completion_percentage,0) AS completion_percentage 
               FROM courses
 			  LEFT JOIN user_progress ON courses.id=user_progress.course_id AND user_progress.user_id=$1
@@ -88,8 +91,10 @@ func List_my_courses(contxt context.Context, db *sql.DB, userID int) ([]models.C
 		var ownerID sql.NullInt64
 		var url sql.NullString
 		var title sql.NullString
+		var summary sql.NullString
+		var tagsJSON sql.NullString
 		var percentageProgress sql.NullFloat64
-		err := rows.Scan(&courseID, &ownerID, &url, &title, &percentageProgress)
+		err := rows.Scan(&courseID, &ownerID, &url, &title, &summary, &tagsJSON, &percentageProgress)
 		if err != nil {
 			return nil, err
 		}
@@ -112,10 +117,22 @@ func List_my_courses(contxt context.Context, db *sql.DB, userID int) ([]models.C
 		} else {
 			item.Title = nil
 		}
+		if summary.Valid {
+			tmp := summary.String
+			item.Summary = &tmp
+		}
+		if tagsJSON.Valid && tagsJSON.String != "" {
+			if err := json.Unmarshal([]byte(tagsJSON.String), &item.Tags); err != nil {
+				return nil, err
+			}
+		}
 		if percentageProgress.Valid {
 			item.CompletionPercent = percentageProgress.Float64
 		}
 		reports = append(reports, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return reports, nil
 }

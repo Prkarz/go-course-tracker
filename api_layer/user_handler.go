@@ -3,8 +3,9 @@ package apilayer
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
-	"os"
+	"strings"
 	"time"
 
 	"github.com/Prkarz/course-tracker/config"
@@ -27,6 +28,12 @@ func (s *APIServer) User_creation_Handler(w http.ResponseWriter, r *http.Request
 	//it sends a bad request response to the client.
 	if err != nil {
 		http.Error(w, "[400_INVALID_REQUEST] Failed to parse user creation request. Please check JSON payload format.", http.StatusBadRequest)
+		return
+	}
+	req.Username = strings.TrimSpace(req.Username)
+	req.Email = strings.TrimSpace(req.Email)
+	if req.Username == "" || req.Email == "" || req.Password == "" {
+		http.Error(w, "[400_INVALID_REQUEST] Username, email, and password are required.", http.StatusBadRequest)
 		return
 	}
 
@@ -67,20 +74,26 @@ func (s *APIServer) User_Login_Handler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "[400_INVALID_REQUEST] Failed to parse login request. Ensure email and password fields are provided in JSON format.", http.StatusBadRequest)
 		return
 	}
+	req.Email = strings.TrimSpace(req.Email)
+	if req.Email == "" || req.Password == "" {
+		http.Error(w, "[400_INVALID_REQUEST] Email and password are required.", http.StatusBadRequest)
+		return
+	}
 	userID, err := service.LoginUser(s.DB, req.Email, req.Password)
 	if err != nil {
 		http.Error(w, "[401_AUTH_FAILED] Authentication failed. Invalid email or password provided.", http.StatusUnauthorized)
 		return
 	}
-	secret_key := os.Getenv("SECRET_SAUCE")
+	secret_key := string(config.GetJWTSecret())
 	claims := jwt.MapClaims{
 		"user_id": userID,
 		"exp":     time.Now().Add(config.JWTExpiryDuration).Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
-	tokenString, err := token.SignedString(secret_key)
+	tokenString, err := token.SignedString([]byte(secret_key))
 	if err != nil {
+		log.Printf("Login Error: %v", err)
 		http.Error(w, "[500_TOKEN_GENERATION_FAILED] Token generation failed. Please try logging in again.", http.StatusInternalServerError)
 		return
 	}
@@ -114,6 +127,7 @@ func (s *APIServer) List_myCourses_Handler(w http.ResponseWriter, r *http.Reques
 	UserID := r.Context().Value("userID").(int)
 	reports, err := repository.List_my_courses(contxt, s.DB, UserID)
 	if err != nil {
+		log.Printf("list courses failed for user %d: %v", UserID, err)
 		http.Error(w, "[500_FETCH_COURSES_FAILED] Failed to retrieve your courses. Database operation timeout or unavailable.", http.StatusInternalServerError)
 		return
 	}

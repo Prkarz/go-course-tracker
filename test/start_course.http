@@ -1,8 +1,0 @@
-POST http://localhost:8080/courses/start
-Content-Type: application/json
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3ODY4OTI4NTYsInVzZXJfaWQiOjI1fQ.PdqtXIX8Nr35pMNQZ5lj73Atu7QRuJnCRfhA_EOrflM
-
-
-{
-    "course_id": 27
-}

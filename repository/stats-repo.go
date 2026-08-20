@@ -66,9 +66,16 @@ func Streak_update(tx *sql.Tx, userID int) error {
         WHERE users.id = $1 
         AND users.deleted_at IS NULL
     )`
-	_, err := tx.Exec(query, userID)
+	result, err := tx.Exec(query, userID)
 	if err != nil {
 		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return errors.New("blocked: user is deleted or does not exist")
 	}
 	return nil
 }
@@ -97,7 +104,7 @@ func Update_progress(tx *sql.Tx, userID, courseID, newPercentage int) (float64, 
 		return 0, errors.New("No ROWS affected")
 	}
 	if err != nil {
-		return 0, errors.New("Some other error")
+		return 0, err
 	}
 
 	return completion_percentage, nil
