@@ -11,7 +11,7 @@ import (
 )
 
 // Creating a Course
-func Create_course(tx *sql.Tx, owner_id int, url, title string) (int, bool, error) {
+func Create_course(tx *sql.Tx, owner_id int, url, title string, summary string, tags []string) (int, bool, error) {
 
 	var isUserActive bool
 	err := tx.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND deleted_at IS NULL)", owner_id).Scan(&isUserActive)
@@ -23,8 +23,8 @@ func Create_course(tx *sql.Tx, owner_id int, url, title string) (int, bool, erro
 		return 0, false, errors.New("blocked: course creator is deleted or does not exist")
 	}
 	query := `
-    INSERT INTO courses (owner_id, playlist_url, title)
-    SELECT $1, $2, $3
+    INSERT INTO courses (owner_id, playlist_url, title,ai_summary,course_tags)
+    SELECT $1, $2, $3, $4, $5
     FROM users 
     WHERE id = $1 AND deleted_at IS NULL
     ON CONFLICT (playlist_url) DO NOTHING
@@ -32,7 +32,7 @@ func Create_course(tx *sql.Tx, owner_id int, url, title string) (int, bool, erro
     `
 
 	var course_id int
-	err = tx.QueryRow(query, owner_id, url, title).Scan(&course_id)
+	err = tx.QueryRow(query, owner_id, url, title, summary, tags).Scan(&course_id)
 
 	if err == sql.ErrNoRows {
 		// In this specific query, ErrNoRows happens for ONE of TWO reasons:
@@ -44,16 +44,14 @@ func Create_course(tx *sql.Tx, owner_id int, url, title string) (int, bool, erro
 		err = tx.QueryRow(fallback_query, url).Scan(&course_id)
 
 		if err == nil {
-			// Success! The course already existed. Return its ID and false (not newly created)
+
 			return course_id, false, nil
 		}
 
 		if err == sql.ErrNoRows {
-			// Reason B confirmed! The URL doesn't exist, which means the user must be deleted.
 			return 0, false, errors.New("blocked: course creator is deleted or does not exist")
 		}
 
-		// Some other database error occurred
 		return 0, false, err
 	}
 
@@ -61,7 +59,6 @@ func Create_course(tx *sql.Tx, owner_id int, url, title string) (int, bool, erro
 		return 0, false, err
 	}
 
-	// Success! A brand new course was created.
 	return course_id, true, nil
 }
 

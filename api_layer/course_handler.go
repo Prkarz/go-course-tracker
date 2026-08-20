@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	aiintegration "github.com/Prkarz/course-tracker/Ai_integration"
 	"github.com/Prkarz/course-tracker/models"
 	"github.com/Prkarz/course-tracker/repository"
 )
@@ -21,13 +22,6 @@ func (s *APIServer) Course_Creation_Handler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	tx, err := s.DB.Begin()
-	if err != nil {
-		http.Error(w, "[500_DB_TRANSACTION_FAILED] Unable to initiate database transaction for course creation.", http.StatusInternalServerError)
-		return
-	}
-	defer tx.Rollback()
-
 	parsed_url, err := url.Parse(req.URL)
 	if err != nil {
 		http.Error(w, "Error parsing url", http.StatusBadRequest)
@@ -37,14 +31,26 @@ func (s *APIServer) Course_Creation_Handler(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "[400_INVALID_DOMAIN] Submitted link is not a valid YouTube domain.", http.StatusBadRequest)
 		return
 	}
-
 	ListID := parsed_url.Query().Get("list")
 	if ListID == "" {
 		http.Error(w, "[400_INVALID_URL] Course tracker requires a YouTube playlist link, not a single video.", http.StatusBadRequest)
 		return
 	}
 
-	courseID, _, err := repository.Create_course(tx, OwnerID, req.URL, req.Title)
+	response, err := aiintegration.CourseInsights(r.Context(), s.AIClient, req.Title)
+	if err != nil {
+		http.Error(w, "[500_COURSE_CREATION_FAILED] Summary creation failed. ", http.StatusInternalServerError)
+		return
+	}
+
+	tx, err := s.DB.Begin()
+	if err != nil {
+		http.Error(w, "[500_DB_TRANSACTION_FAILED] Unable to initiate database transaction for course creation.", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	courseID, _, err := repository.Create_course(tx, OwnerID, req.URL, req.Title, response.Summary, response.Tags)
 	if err != nil {
 		http.Error(w, "[500_COURSE_CREATION_FAILED] Course creation failed. Duplicate course or insufficient permissions.", http.StatusInternalServerError)
 		return
