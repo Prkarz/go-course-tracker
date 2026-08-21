@@ -8,8 +8,8 @@ import (
 	"os"
 
 	aiintegration "github.com/Prkarz/course-tracker/Ai_integration"
-	"github.com/Prkarz/course-tracker/middleWare"
 	apilayer "github.com/Prkarz/course-tracker/api_layer"
+	"github.com/Prkarz/course-tracker/middleWare"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
 )
@@ -32,13 +32,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("[DB_CONNECTION_FAILED] Cannot connect to PostgreSQL database. Verify server is running and credentials are correct. Error: %v", err)
 	}
-	fmt.Println("🚀 Successfully connected to the PostgreSQL database!")
+	fmt.Println("[DB_CONNECTED] Successfully connected to PostgreSQL.")
 
 	client, err := aiintegration.Client_Ai_Init()
 	if err != nil {
 		log.Fatalf("[AI_CONFIG_ERROR] Failed to initialize Gemini client: %v", err)
 	}
-	
 
 	server := &apilayer.APIServer{DB: db, AIClient: client}
 
@@ -58,6 +57,6 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-	fmt.Println("🌐 Server is running on port 8080...")
+	fmt.Printf("[SERVER_STARTED] Server is running on port %s.\n", port)
 	log.Fatal(http.ListenAndServe(":"+port, handlerWithCORS))
 }
