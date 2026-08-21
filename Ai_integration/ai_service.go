@@ -44,6 +44,5 @@ func CourseInsights(ctx context.Context, client *genai.Client, summary string) (
 	if result.Summary == "" {
 		return nil, fmt.Errorf("AI response did not contain a summary")
 	}
-
 	return &result, nil
 }
