@@ -27,42 +27,47 @@ func (s *APIServer) User_creation_Handler(w http.ResponseWriter, r *http.Request
 	//decode req the request body into the req variable. If there is an error during decoding,
 	//it sends a bad request response to the client.
 	if err != nil {
-		http.Error(w, "[400_INVALID_REQUEST] Failed to parse user creation request. Please check JSON payload format.", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "400_INVALID_REQUEST", "Failed to parse user creation request. Please check the JSON payload format.")
 		return
 	}
 	req.Username = strings.TrimSpace(req.Username)
 	req.Email = strings.TrimSpace(req.Email)
 	if req.Username == "" || req.Email == "" || req.Password == "" {
-		http.Error(w, "[400_INVALID_REQUEST] Username, email, and password are required.", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "400_INVALID_REQUEST", "Username, email, and password are required.")
 		return
 	}
 
 	tx, err := s.DB.Begin()
 	if err != nil {
-		http.Error(w, "[500_DB_TRANSACTION_FAILED] Unable to initiate database transaction. Please try again.", http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "500_DB_TRANSACTION_FAILED", "Unable to initiate database transaction. Please try again.")
 		return
 	}
 	defer tx.Rollback()
 
 	userID, isNewUser, err := service.Register_user(tx, req.Username, req.Email, req.Password)
 	if err != nil {
-		http.Error(w, "[500_USER_REGISTRATION_FAILED] User registration failed. Email may already exist or password requirements not met.", http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "500_USER_REGISTRATION_FAILED", "User registration failed.")
 		return
 	}
 	if isNewUser {
 		err := repository.InitUserStats(tx, userID)
 		if err != nil {
-			http.Error(w, "[500_USER_STATS_INIT_FAILED] Failed to initialize user statistics. Please contact support.", http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, "500_USER_STATS_INIT_FAILED", "Failed to initialize user statistics.")
 			return
 		}
 	}
 	err = tx.Commit()
 	if err != nil {
-		http.Error(w, "[500_DB_COMMIT_FAILED] Failed to commit changes to database. User registration may be incomplete.", http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "500_DB_COMMIT_FAILED", "Failed to commit changes to the database.")
 		return
 	}
-	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte("User account successfully created."))
+	if !isNewUser {
+		writeError(w, http.StatusConflict, "409_EMAIL_EXISTS", "An account with this email already exists.")
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]string{
+		"message": "Account created successfully.",
+	})
 	//write is used to send a success message back to the client indicating that the user was successfully created.
 
 }
@@ -71,17 +76,17 @@ func (s *APIServer) User_Login_Handler(w http.ResponseWriter, r *http.Request) {
 	var req models.LoginUserRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		http.Error(w, "[400_INVALID_REQUEST] Failed to parse login request. Ensure email and password fields are provided in JSON format.", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "400_INVALID_REQUEST", "Failed to parse login request. Ensure email and password are provided.")
 		return
 	}
 	req.Email = strings.TrimSpace(req.Email)
 	if req.Email == "" || req.Password == "" {
-		http.Error(w, "[400_INVALID_REQUEST] Email and password are required.", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "400_INVALID_REQUEST", "Email and password are required.")
 		return
 	}
 	userID, err := service.LoginUser(s.DB, req.Email, req.Password)
 	if err != nil {
-		http.Error(w, "[401_AUTH_FAILED] Authentication failed. Invalid email or password provided.", http.StatusUnauthorized)
+		writeError(w, http.StatusUnauthorized, "401_AUTH_FAILED", "Invalid email or password.")
 		return
 	}
 	secret_key := string(config.GetJWTSecret())
@@ -93,8 +98,8 @@ func (s *APIServer) User_Login_Handler(w http.ResponseWriter, r *http.Request) {
 
 	tokenString, err := token.SignedString([]byte(secret_key))
 	if err != nil {
-		log.Printf("Login Error: %v", err)
-		http.Error(w, "[500_TOKEN_GENERATION_FAILED] Token generation failed. Please try logging in again.", http.StatusInternalServerError)
+		log.Printf("[TOKEN_GENERATION_FAILED] error=%v", err)
+		writeError(w, http.StatusInternalServerError, "500_TOKEN_GENERATION_FAILED", "Token generation failed. Please try logging in again.")
 		return
 	}
 	w.Write([]byte(tokenString))
@@ -104,21 +109,23 @@ func (s *APIServer) User_delete_Handler(w http.ResponseWriter, r *http.Request) 
 	UserID := r.Context().Value("userID").(int)
 	tx, err := s.DB.Begin()
 	if err != nil {
-		http.Error(w, "[500_DB_TRANSACTION_FAILED] Unable to initiate database transaction for user deletion.", http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "500_DB_TRANSACTION_FAILED", "Unable to initiate database transaction for user deletion.")
 		return
 	}
 	defer tx.Rollback()
 	err = repository.Delete_user_by_id(tx, UserID)
 	if err != nil {
-		http.Error(w, "[500_USER_DELETE_FAILED] Failed to delete user account. Please try again or contact support.", http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "500_USER_DELETE_FAILED", "Failed to delete user account.")
 		return
 	}
 	err = tx.Commit()
 	if err != nil {
-		http.Error(w, "[500_DB_COMMIT_FAILED] Failed to commit user deletion. Account may still exist.", http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "500_DB_COMMIT_FAILED", "Failed to commit user deletion.")
 		return
 	}
-	w.Write([]byte("User account successfully deleted."))
+	writeJSON(w, http.StatusOK, map[string]string{
+		"message": "User account deleted successfully.",
+	})
 }
 
 func (s *APIServer) List_myCourses_Handler(w http.ResponseWriter, r *http.Request) {
@@ -127,9 +134,10 @@ func (s *APIServer) List_myCourses_Handler(w http.ResponseWriter, r *http.Reques
 	UserID := r.Context().Value("userID").(int)
 	reports, err := repository.List_my_courses(contxt, s.DB, UserID)
 	if err != nil {
-		log.Printf("list courses failed for user %d: %v", UserID, err)
-		http.Error(w, "[500_FETCH_COURSES_FAILED] Failed to retrieve your courses. Database operation timeout or unavailable.", http.StatusInternalServerError)
+		log.Printf("[COURSE_LIST_FAILED] user_id=%d error=%v", UserID, err)
+		writeError(w, http.StatusInternalServerError, "500_FETCH_COURSES_FAILED", "Failed to retrieve your courses.")
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(reports)
 }
