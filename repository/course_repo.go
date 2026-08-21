@@ -74,7 +74,9 @@ func List_my_courses(contxt context.Context, db *sql.DB, userID int) ([]models.C
 	courses.title,
 	courses.ai_summary,
 	COALESCE(to_json(courses.course_tags), '[]'::json) AS course_tags,
-	COALESCE(user_progress.completion_percentage,0) AS completion_percentage 
+	COALESCE(user_progress.completion_percentage,0) AS completion_percentage,
+	user_progress.started_at,
+	(user_progress.course_id IS NOT NULL) AS is_started
               FROM courses
 			  LEFT JOIN user_progress ON courses.id=user_progress.course_id AND user_progress.user_id=$1
               WHERE courses.owner_id = $1 AND courses.deleted_at IS NULL ;`
@@ -94,7 +96,9 @@ func List_my_courses(contxt context.Context, db *sql.DB, userID int) ([]models.C
 		var summary sql.NullString
 		var tagsJSON sql.NullString
 		var percentageProgress sql.NullFloat64
-		err := rows.Scan(&courseID, &ownerID, &url, &title, &summary, &tagsJSON, &percentageProgress)
+		var startedAt sql.NullTime
+		var isStarted bool
+		err := rows.Scan(&courseID, &ownerID, &url, &title, &summary, &tagsJSON, &percentageProgress, &startedAt, &isStarted)
 		if err != nil {
 			return nil, err
 		}
@@ -129,6 +133,10 @@ func List_my_courses(contxt context.Context, db *sql.DB, userID int) ([]models.C
 		if percentageProgress.Valid {
 			item.CompletionPercent = percentageProgress.Float64
 		}
+		if startedAt.Valid {
+			item.StartedAt = &startedAt.Time
+		}
+		item.IsStarted = isStarted
 		reports = append(reports, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -164,7 +172,7 @@ func Start_course(contxt context.Context, tx *sql.Tx, userID, courseID int) erro
 	SELECT $1, $2, $3, $4, $5
 	FROM users
 	WHERE id = $1 AND deleted_at IS NULL
-	AND EXISTS (SELECT 1 FROM courses WHERE id = $2 )
+	AND EXISTS (SELECT 1 FROM courses WHERE id = $2 AND deleted_at IS NULL)
 	`
 
 	result, err := tx.ExecContext(contxt, query, userID, courseID, 0, current_Time, current_Time)
@@ -192,7 +200,7 @@ func Start_course(contxt context.Context, tx *sql.Tx, userID, courseID int) erro
 func Delete_course(tx *sql.Tx, userID, CourseID int) error {
 	query := `UPDATE courses
 	            SET deleted_at=CURRENT_TIMESTAMP 
-				WHERE owner_id=$1 AND id=$2
+				WHERE owner_id=$1 AND id=$2 AND deleted_at IS NULL
 				`
 
 	result, err := tx.Exec(query, userID, CourseID)
@@ -207,5 +215,126 @@ func Delete_course(tx *sql.Tx, userID, CourseID int) error {
 	if rows == 0 {
 		return errors.New("Unauthorized or course not found")
 	}
+	return nil
+}
+
+func Fetch_IndiCourse(tx *sql.Tx, userID, courseID int) (*models.CourseViewerData, error) {
+	query := `
+    SELECT 
+	courses.title, courses.ai_summary,
+	course_videos.title, course_videos.youtube_video_id, course_videos.duration, course_videos.index_order,
+	COALESCE(course_video_progress.is_completed, false) AS is_completed
+	FROM courses
+    LEFT JOIN course_videos 
+        ON courses.id = course_videos.course_id
+    LEFT JOIN course_video_progress 
+        ON course_videos.youtube_video_id = course_video_progress.video_id 
+		AND course_video_progress.course_id = courses.id
+        AND course_video_progress.user_id = $2
+	WHERE courses.id = $1 AND courses.deleted_at IS NULL
+	ORDER BY course_videos.index_order ASC;
+`
+
+	result, err := tx.Query(query, courseID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer result.Close()
+
+	courseData := &models.CourseViewerData{}
+	foundCourse := false
+
+	for result.Next() {
+		var title, summary sql.NullString
+		var videoTitle, videoID, duration sql.NullString
+		var videoIndex sql.NullInt64
+		var isCompleted bool
+		err := result.Scan(
+			&title, &summary,
+			&videoTitle, &videoID, &duration, &videoIndex, &isCompleted,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		foundCourse = true
+		if title.Valid {
+			courseData.Title = title.String
+		}
+		if summary.Valid {
+			courseData.Summary = summary.String
+		}
+		if videoID.Valid {
+			video := models.VideoData{
+				VideoId: videoID.String,
+				Status:  isCompleted,
+			}
+			if videoTitle.Valid {
+				video.VideoTitle = videoTitle.String
+			}
+			if duration.Valid {
+				video.Duration = duration.String
+			}
+			if videoIndex.Valid {
+				video.Index = int(videoIndex.Int64)
+			}
+			courseData.VideoInfo = append(courseData.VideoInfo, video)
+		}
+	}
+	if err := result.Err(); err != nil {
+		return nil, err
+	}
+	if !foundCourse {
+		return nil, errors.New("course not found")
+	}
+	return courseData, nil
+}
+
+func Insert_course_videos(tx *sql.Tx, courseID int, vd []models.VideoData) error {
+	query := `INSERT INTO course_videos(course_id,youtube_video_id,title,index_order,duration)
+	        VALUES($1,$2,$3,$4,$5)
+			`
+	for _, vid := range vd {
+		_, err := tx.Exec(query, courseID, vid.VideoId, vid.VideoTitle, vid.Index, vid.Duration)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func Insert_Video_Progress(tx *sql.Tx, userID int, courseID int, videoID string) error {
+	query := `
+		INSERT INTO course_video_progress (user_id, course_id, video_id)
+		SELECT $1, $2, $3
+		FROM users
+		WHERE users.id = $1
+		  AND users.deleted_at IS NULL
+		  AND EXISTS (
+			SELECT 1
+			FROM courses
+			WHERE courses.id = $2
+			  AND courses.deleted_at IS NULL
+		  )
+		  AND EXISTS (
+			SELECT 1
+			FROM course_videos
+			WHERE course_videos.course_id = $2
+			  AND course_videos.youtube_video_id = $3
+		  )
+	`
+
+	result, err := tx.Exec(query, userID, courseID, videoID)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return errors.New("blocked: user, course, or video is invalid")
+	}
+
 	return nil
 }

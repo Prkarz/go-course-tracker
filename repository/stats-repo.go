@@ -19,15 +19,17 @@ func InitUserStats(tx *sql.Tx, userID int) error {
 // It takes the user ID, points to add, and a boolean indicating whether to update the streak.
 // The function updates the total points and optionally updates the streak count based on the last active date.
 func Points_update(tx *sql.Tx, userID, pointsToAdd int) error {
+	if pointsToAdd < 0 {
+		return errors.New("points to add cannot be negative")
+	}
+
 	query := `UPDATE user_stats 
-    SET total_points = COALESCE(total_points, 0) + $1 
-    WHERE user_id = $2
-    AND EXISTS (
-        SELECT 1 FROM users 
-        WHERE users.id = $2 
-        AND users.deleted_at IS NULL
-    ) `
-	log.Printf("DB EXECUTE - UserID: %d | Points to add: %d", userID, pointsToAdd)
+	SET total_points = COALESCE(user_stats.total_points, 0) + $1
+	FROM users
+	WHERE user_stats.user_id = $2
+	  AND users.id = $2
+	  AND users.deleted_at IS NULL`
+	log.Printf("[POINTS_UPDATE] user_id=%d points=%d", userID, pointsToAdd)
 	result, err := tx.Exec(query, pointsToAdd, userID)
 	if err != nil {
 		return err
@@ -84,6 +86,10 @@ func Streak_update(tx *sql.Tx, userID int) error {
 // It takes the user ID, course ID, and the new completion percentage as parameters.
 // The function updates the corresponding record in the user_progress table.
 func Update_progress(tx *sql.Tx, userID, courseID, newPercentage int) (float64, error) {
+	if newPercentage < 0 {
+		return 0, errors.New("percentage increment cannot be negative")
+	}
+
 	var completion_percentage float64
 	query := `UPDATE user_progress 
               SET completion_percentage = LEAST(COALESCE(completion_percentage, 0) + $1,100), 
@@ -101,7 +107,7 @@ func Update_progress(tx *sql.Tx, userID, courseID, newPercentage int) (float64, 
 
 	err := tx.QueryRow(query, newPercentage, userID, courseID).Scan(&completion_percentage)
 	if err == sql.ErrNoRows {
-		return 0, errors.New("No ROWS affected")
+		return 0, errors.New("no progress row was updated")
 	}
 	if err != nil {
 		return 0, err
