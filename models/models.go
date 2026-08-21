@@ -15,13 +15,15 @@ type User_stats struct {
 // It contains fields for the course ID, owner ID, name, email, URL, and title.
 // The OwnerID and URL fields are pointers to allow for null values.
 type Course_data struct {
-	ID                int     `json:"id"`
-	OwnerID           *int    `json:"owner_id,omitempty"`
-	URL               *string `json:"url,omitempty"`
-	Title             *string `json:"title,omitempty"`
-	Summary           *string `json:"summary,omitempty"`
-	Tags              []string `json:"tags"`
-	CompletionPercent float64 `json:"completion_percent"`
+	ID                int        `json:"id"`
+	OwnerID           *int       `json:"owner_id,omitempty"`
+	URL               *string    `json:"url,omitempty"`
+	Title             *string    `json:"title,omitempty"`
+	Summary           *string    `json:"summary,omitempty"`
+	Tags              []string   `json:"tags"`
+	CompletionPercent float64    `json:"completion_percent"`
+	StartedAt         *time.Time `json:"started_at,omitempty"`
+	IsStarted         bool       `json:"is_started"`
 }
 
 // used by the List_my_courses function to return a list of courses along with user information.
@@ -68,4 +70,18 @@ type LoginUserRequest struct {
 type AIresponseCatcher struct {
 	Summary string   `json:"ai_summary"`
 	Tags    []string `json:"course_tags"`
+}
+
+type VideoData struct {
+	Duration   string `json:"duration"`
+	VideoTitle string `json:"title"`
+	VideoId    string `json:"video_id"`
+	Index      int    `json:"index"`
+	Status     bool   `json:"status"`
+}
+
+type CourseViewerData struct {
+	Title     string      `json:"title"`
+	Summary   string      `json:"summary"`
+	VideoInfo []VideoData `json:"playlist"`
 }
