@@ -88,5 +88,5 @@ func main() {
 	spa := spaHandler{staticPath: "frontend/dist", indexPath: "index.html"}
 	mux.Handle("/", spa)
 	fmt.Printf("[SERVER_STARTED] Server is running on port %s.\n", port)
-	log.Println(http.ListenAndServe(":"+port, handlerWithCORS))
+	log.Fatal(http.ListenAndServe(":"+port, handlerWithCORS))
 }
