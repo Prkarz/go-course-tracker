@@ -18,7 +18,7 @@ const STORAGE_KEYS = {
   USER_INFO: 'course_tracker_user_info',
 };
 
-const DEFAULT_API_BASE_URL = 'http://localhost:8080';
+const DEFAULT_API_BASE_URL = '/api';
 
 export function getApiBaseUrl(): string {
   const customUrl = localStorage.getItem(STORAGE_KEYS.API_BASE_URL);
@@ -99,7 +99,8 @@ async function request<T>(
   const url = `${baseUrl}${endpoint}`;
 
   try {
-    const response = await fetch(url, {
+    const finalUrl = url.startsWith('/api') ? url : `/api${url.startsWith('/') ? '' : '/'}${url}`;
+    const response = await fetch(finalUrl, {
       ...options,
       headers,
     });
