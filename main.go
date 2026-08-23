@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 
+	"path/filepath"
+
 	aiintegration "github.com/Prkarz/course-tracker/Ai_integration"
 	apilayer "github.com/Prkarz/course-tracker/api_layer"
 	"github.com/Prkarz/course-tracker/middleWare"
@@ -14,6 +16,24 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
 )
+
+type spaHandler struct {
+	staticPath string
+	indexPath  string
+}
+
+func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	path := filepath.Join(h.staticPath, r.URL.Path)
+
+	// Check if the file exists and is not a directory
+	fi, err := os.Stat(path)
+	if os.IsNotExist(err) || fi.IsDir() {
+		// File does not exist, serve the React index.html
+		http.ServeFile(w, r, filepath.Join(h.staticPath, h.indexPath))
+		return
+	}
+	http.FileServer(http.Dir(h.staticPath)).ServeHTTP(w, r)
+}
 
 func main() {
 	err := godotenv.Load()
@@ -47,24 +67,26 @@ func main() {
 
 	mux := http.NewServeMux()
 	//Administration Routes
-	mux.HandleFunc("POST /users/create", server.User_creation_Handler)
-	mux.HandleFunc("POST /users/login", server.User_Login_Handler)
-	mux.HandleFunc("POST /courses/create", middleWare.JWT_Middleware(server.Course_Creation_Handler))
-	mux.HandleFunc("POST /users/delete", middleWare.JWT_Middleware(server.User_delete_Handler))
+	mux.HandleFunc("POST /api/users/create", server.User_creation_Handler)
+	mux.HandleFunc("POST /api/users/login", server.User_Login_Handler)
+	mux.HandleFunc("POST /api/courses/create", middleWare.JWT_Middleware(server.Course_Creation_Handler))
+	mux.HandleFunc("POST /api/users/delete", middleWare.JWT_Middleware(server.User_delete_Handler))
 	// Course & Gamification Routes
-	mux.HandleFunc("POST /courses/mycourses", middleWare.JWT_Middleware(server.List_myCourses_Handler))
-	mux.HandleFunc("POST /courses/detail", middleWare.JWT_Middleware(server.Course_Detail_Handler))
-	mux.HandleFunc("POST /courses/delete", middleWare.JWT_Middleware(server.Course_Delete_Handler))
-	mux.HandleFunc("POST /courses/start", middleWare.JWT_Middleware(server.Start_Course_Handler))
-	mux.HandleFunc("POST /courses/progress", middleWare.JWT_Middleware(server.Update_progress_Handler))
-	mux.HandleFunc("GET /stats/me", middleWare.JWT_Middleware(server.User_stats_Handler))
-	mux.HandleFunc("POST /courses/videos/viewed", middleWare.JWT_Middleware(server.Video_Viewed_Handler))
+	mux.HandleFunc("POST /api/courses/mycourses", middleWare.JWT_Middleware(server.List_myCourses_Handler))
+	mux.HandleFunc("POST /api/courses/detail", middleWare.JWT_Middleware(server.Course_Detail_Handler))
+	mux.HandleFunc("POST /api/courses/delete", middleWare.JWT_Middleware(server.Course_Delete_Handler))
+	mux.HandleFunc("POST /api/courses/start", middleWare.JWT_Middleware(server.Start_Course_Handler))
+	mux.HandleFunc("POST /api/courses/progress", middleWare.JWT_Middleware(server.Update_progress_Handler))
+	mux.HandleFunc("GET /api/stats/me", middleWare.JWT_Middleware(server.User_stats_Handler))
+	mux.HandleFunc("POST /api/courses/videos/viewed", middleWare.JWT_Middleware(server.Video_Viewed_Handler))
 
 	handlerWithCORS := middleWare.CORSMiddleware(mux)
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
+	spa := spaHandler{staticPath: "frontend/dist", indexPath: "index.html"}
+	mux.Handle("/", spa)
 	fmt.Printf("[SERVER_STARTED] Server is running on port %s.\n", port)
-	log.Fatal(http.ListenAndServe(":"+port, handlerWithCORS))
+	log.Println(http.ListenAndServe(":"+port, handlerWithCORS))
 }
