@@ -24,6 +24,8 @@ type Course_data struct {
 	CompletionPercent float64    `json:"completion_percent"`
 	StartedAt         *time.Time `json:"started_at,omitempty"`
 	IsStarted         bool       `json:"is_started"`
+	ThumbnailURL      *string    `json:"thumbnail_url,omitempty"`
+	FirstVideoID      *string    `json:"first_video_id,omitempty"`
 }
 
 // used by the List_my_courses function to return a list of courses along with user information.
@@ -55,6 +57,11 @@ type StartCourseRequest struct {
 type UpdateProgress struct {
 	CourseID      int `json:"course_id"`
 	NewPercentage int `json:"percentage_to_add"`
+}
+
+type VideoViewedRequest struct {
+	CourseID int    `json:"course_id"`
+	VideoID  string `json:"video_id"`
 }
 
 type PointsToUpdate struct {

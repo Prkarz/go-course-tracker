@@ -44,12 +44,16 @@ func (s *APIServer) User_creation_Handler(w http.ResponseWriter, r *http.Request
 	}
 	defer tx.Rollback()
 
-	userID, isNewUser, err := service.Register_user(tx, req.Username, req.Email, req.Password)
+	userID, isNewOrReactivated, isReactivated, err := service.Register_user(tx, req.Username, req.Email, req.Password)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "500_USER_REGISTRATION_FAILED", "User registration failed.")
 		return
 	}
-	if isNewUser {
+	if !isNewOrReactivated {
+		writeError(w, http.StatusConflict, "409_EMAIL_EXISTS", "An active account with this email already exists. Please log in.")
+		return
+	}
+	if !isReactivated {
 		err := repository.InitUserStats(tx, userID)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "500_USER_STATS_INIT_FAILED", "Failed to initialize user statistics.")
@@ -61,12 +65,16 @@ func (s *APIServer) User_creation_Handler(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusInternalServerError, "500_DB_COMMIT_FAILED", "Failed to commit changes to the database.")
 		return
 	}
-	if !isNewUser {
-		writeError(w, http.StatusConflict, "409_EMAIL_EXISTS", "An account with this email already exists.")
-		return
+
+	msg := "Account created successfully."
+	if isReactivated {
+		msg = "Welcome back! Account reactivated and your courses have been restored."
 	}
-	writeJSON(w, http.StatusCreated, map[string]string{
-		"message": "Account created successfully.",
+
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"message":     msg,
+		"reactivated": isReactivated,
+		"user_id":     userID,
 	})
 	//write is used to send a success message back to the client indicating that the user was successfully created.
 
@@ -89,6 +97,10 @@ func (s *APIServer) User_Login_Handler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "401_AUTH_FAILED", "Invalid email or password.")
 		return
 	}
+
+	// Award login reward (+50 XP bonus on daily login / re-login) and update streak
+	_, _ = repository.Record_Login_Reward(s.DB, userID, 50)
+
 	secret_key := string(config.GetJWTSecret())
 	claims := jwt.MapClaims{
 		"user_id": userID,

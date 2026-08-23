@@ -85,10 +85,18 @@ func (s *APIServer) Course_Creation_Handler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	err = repository.Insert_course_videos(tx, courseID, videos)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "500_VIDEO_SAVE_FAILED", "Failed to save the playlist videos.")
-		return
+	if isNewCourse {
+		err = repository.Insert_course_videos(tx, courseID, videos)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "500_VIDEO_SAVE_FAILED", "Failed to save the playlist videos.")
+			return
+		}
+	} else {
+		var videoCount int
+		_ = tx.QueryRow("SELECT COUNT(*) FROM course_videos WHERE course_id = $1", courseID).Scan(&videoCount)
+		if videoCount == 0 && len(videos) > 0 {
+			_ = repository.Insert_course_videos(tx, courseID, videos)
+		}
 	}
 
 	err = tx.Commit()
@@ -98,20 +106,13 @@ func (s *APIServer) Course_Creation_Handler(w http.ResponseWriter, r *http.Reque
 	}
 	w.Header().Set("Content-Type", "application/json")
 
-	status := http.StatusOK
-	result := map[string]interface{}{
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
 		"course_id":      courseID,
-		"created":        isNewCourse,
-		"already_exists": !isNewCourse,
-	}
-	if isNewCourse {
-		status = http.StatusCreated
-		result["message"] = "[201_COURSE_CREATED] Course created successfully."
-	} else {
-		result["message"] = "[200_COURSE_EXISTS] Course already exists in your courses."
-	}
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(result)
+		"created":        true,
+		"already_exists": false,
+		"message":        "[201_COURSE_CREATED] Course added to your courses successfully.",
+	})
 
 }
 
@@ -150,4 +151,74 @@ func (s *APIServer) Start_Course_Handler(w http.ResponseWriter, r *http.Request)
 		"message": "Course started successfully.",
 	})
 
+}
+
+func (s *APIServer) Course_Detail_Handler(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value("userID").(int)
+	var req models.StartCourseRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.CourseID <= 0 {
+		writeError(w, http.StatusBadRequest, "400_INVALID_REQUEST", "course_id must be a positive integer.")
+		return
+	}
+
+	tx, err := s.DB.Begin()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "500_DB_TRANSACTION_FAILED", "Unable to initiate course lookup.")
+		return
+	}
+	defer tx.Rollback()
+
+	detail, err := repository.Fetch_IndiCourse(tx, userID, req.CourseID)
+	if err != nil {
+		log.Printf("[COURSE_DETAIL_FAILED] user_id=%d course_id=%d error=%v", userID, req.CourseID, err)
+		writeError(w, http.StatusInternalServerError, "500_COURSE_DETAIL_FAILED", "Unable to load course videos.")
+		return
+	}
+
+	// Auto-heal missing or placeholder durations for existing course records
+	var missingVideoIDs []string
+	for _, vid := range detail.VideoInfo {
+		if vid.Duration == "" || vid.Duration == "TBD" || vid.Duration == "10:00" {
+			missingVideoIDs = append(missingVideoIDs, vid.VideoId)
+		}
+	}
+	if len(missingVideoIDs) > 0 {
+		fetchedDurations := service.FetchVideoDurations(missingVideoIDs)
+		for i, vid := range detail.VideoInfo {
+			if realDur, ok := fetchedDurations[vid.VideoId]; ok && realDur != "" {
+				detail.VideoInfo[i].Duration = realDur
+				_, _ = tx.Exec("UPDATE course_videos SET duration = $1 WHERE youtube_video_id = $2 AND course_id = $3", realDur, vid.VideoId, req.CourseID)
+			}
+		}
+	}
+	_ = tx.Commit()
+
+	writeJSON(w, http.StatusOK, detail)
+}
+
+func (s *APIServer) Course_Delete_Handler(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value("userID").(int)
+	var req models.StartCourseRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.CourseID <= 0 {
+		writeError(w, http.StatusBadRequest, "400_INVALID_REQUEST", "course_id must be a positive integer.")
+		return
+	}
+
+	tx, err := s.DB.Begin()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "500_DB_TRANSACTION_FAILED", "Unable to initiate course deletion.")
+		return
+	}
+	defer tx.Rollback()
+	if err := repository.Delete_course(tx, userID, req.CourseID); err != nil {
+		writeError(w, http.StatusNotFound, "404_COURSE_NOT_FOUND", "Course not found.")
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		writeError(w, http.StatusInternalServerError, "500_DB_COMMIT_FAILED", "Failed to commit course deletion.")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"message": "Course deleted successfully. Your earned XP is permanent and preserved.",
+	})
 }

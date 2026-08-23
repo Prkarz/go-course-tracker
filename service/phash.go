@@ -8,16 +8,16 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func Register_user(db *sql.Tx, username, email, plain_password string) (int, bool, error) {
+func Register_user(db *sql.Tx, username, email, plain_password string) (int, bool, bool, error) {
 	hashed_Password, err := bcrypt.GenerateFromPassword([]byte(plain_password), bcrypt.DefaultCost)
 	if err != nil {
-		return 0, false, errors.New("Unable to hash password")
+		return 0, false, false, errors.New("Unable to hash password")
 	}
-	userID, isNewUser, err := repository.Create_user(db, username, email, string(hashed_Password))
+	userID, isNewOrReactivated, isReactivated, err := repository.Create_or_Reactivate_User(db, username, email, string(hashed_Password))
 	if err != nil {
-		return 0, false, errors.New("Unable to Registering User")
+		return 0, false, false, errors.New("Unable to Registering User")
 	}
-	return userID, isNewUser, nil
+	return userID, isNewOrReactivated, isReactivated, nil
 }
 func LoginUser(db *sql.DB, email string, typedPassword string) (int, error) {
 	UserID, password, err := repository.Login_User_byemail(db, email)

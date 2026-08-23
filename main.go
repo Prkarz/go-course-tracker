@@ -10,6 +10,7 @@ import (
 	aiintegration "github.com/Prkarz/course-tracker/Ai_integration"
 	apilayer "github.com/Prkarz/course-tracker/api_layer"
 	"github.com/Prkarz/course-tracker/middleWare"
+	"github.com/Prkarz/course-tracker/repository"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
 )
@@ -33,6 +34,9 @@ func main() {
 		log.Fatalf("[DB_CONNECTION_FAILED] Cannot connect to PostgreSQL database. Verify server is running and credentials are correct. Error: %v", err)
 	}
 	fmt.Println("[DB_CONNECTED] Successfully connected to PostgreSQL.")
+	if err := repository.EnsureCourseVideoProgressTable(db); err != nil {
+		log.Fatalf("[DB_SCHEMA_ERROR] Failed to initialize video progress table: %v", err)
+	}
 
 	client, err := aiintegration.Client_Ai_Init()
 	if err != nil {
@@ -49,8 +53,12 @@ func main() {
 	mux.HandleFunc("POST /users/delete", middleWare.JWT_Middleware(server.User_delete_Handler))
 	// Course & Gamification Routes
 	mux.HandleFunc("POST /courses/mycourses", middleWare.JWT_Middleware(server.List_myCourses_Handler))
+	mux.HandleFunc("POST /courses/detail", middleWare.JWT_Middleware(server.Course_Detail_Handler))
+	mux.HandleFunc("POST /courses/delete", middleWare.JWT_Middleware(server.Course_Delete_Handler))
 	mux.HandleFunc("POST /courses/start", middleWare.JWT_Middleware(server.Start_Course_Handler))
 	mux.HandleFunc("POST /courses/progress", middleWare.JWT_Middleware(server.Update_progress_Handler))
+	mux.HandleFunc("GET /stats/me", middleWare.JWT_Middleware(server.User_stats_Handler))
+	mux.HandleFunc("POST /courses/videos/viewed", middleWare.JWT_Middleware(server.Video_Viewed_Handler))
 
 	handlerWithCORS := middleWare.CORSMiddleware(mux)
 	port := os.Getenv("PORT")

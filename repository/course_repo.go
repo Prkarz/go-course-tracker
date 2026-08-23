@@ -5,11 +5,24 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"log"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Prkarz/course-tracker/models"
 )
+
+func EnsureCourseVideoProgressTable(db *sql.DB) error {
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS course_video_progress (
+			user_id INTEGER NOT NULL,
+			course_id INTEGER NOT NULL,
+			video_id TEXT NOT NULL,
+			is_completed BOOLEAN NOT NULL DEFAULT TRUE,
+			PRIMARY KEY (user_id, course_id, video_id)
+		)`)
+	return err
+}
 
 // Creating a Course
 func Create_course(tx *sql.Tx, owner_id int, url, title string, summary string, tags []string) (int, bool, error) {
@@ -23,50 +36,51 @@ func Create_course(tx *sql.Tx, owner_id int, url, title string, summary string, 
 		// If they are deleted, kick them out IMMEDIATELY before doing anything else!
 		return 0, false, errors.New("blocked: course creator is deleted or does not exist")
 	}
+
 	query := `
-    INSERT INTO courses (owner_id, playlist_url, title,ai_summary,course_tags)
-    SELECT $1, $2, $3, $4, $5
+    INSERT INTO courses (owner_id, playlist_url, title, ai_summary, course_tags, deleted_at)
+    SELECT $1, $2, $3, $4, $5, NULL
     FROM users 
     WHERE id = $1 AND deleted_at IS NULL
-    ON CONFLICT (playlist_url) DO NOTHING
-    RETURNING id;
+    ON CONFLICT (playlist_url) DO UPDATE
+    SET deleted_at = NULL,
+        title = CASE WHEN courses.title IS NULL OR courses.title = '' THEN EXCLUDED.title ELSE courses.title END,
+        ai_summary = CASE WHEN courses.ai_summary IS NULL OR courses.ai_summary = '' THEN EXCLUDED.ai_summary ELSE courses.ai_summary END,
+        course_tags = CASE WHEN courses.course_tags IS NULL OR cardinality(courses.course_tags) = 0 THEN EXCLUDED.course_tags ELSE courses.course_tags END
+    RETURNING id, (xmax = 0) AS is_new;
     `
 
 	var course_id int
-	err = tx.QueryRow(query, owner_id, url, title, summary, tags).Scan(&course_id)
-
-	if err == sql.ErrNoRows {
-		// In this specific query, ErrNoRows happens for ONE of TWO reasons:
-		// Reason A: ON CONFLICT triggered (The URL already exists)
-		// Reason B: The SELECT returned nothing (The user is deleted/doesn't exist)
-
-		// Let's check Reason A first by looking for the URL:
-		fallback_query := "SELECT id FROM courses WHERE playlist_url = $1  "
-		err = tx.QueryRow(fallback_query, url).Scan(&course_id)
-
-		if err == nil {
-
-			return course_id, false, nil
-		}
-
-		if err == sql.ErrNoRows {
-			return 0, false, errors.New("blocked: course creator is deleted or does not exist")
-		}
-
-		return 0, false, err
-	}
+	var isNewCourse bool
+	err = tx.QueryRow(query, owner_id, url, title, summary, tags).Scan(&course_id, &isNewCourse)
 
 	if err != nil {
-		return 0, false, err
+		// Fallback query if conflict without RETURNING or other dialect edge case
+		fallback_query := "SELECT id FROM courses WHERE playlist_url = $1"
+		err = tx.QueryRow(fallback_query, url).Scan(&course_id)
+		if err != nil {
+			return 0, false, err
+		}
+		// Un-delete if it was previously soft-deleted
+		_, _ = tx.Exec("UPDATE courses SET deleted_at = NULL WHERE id = $1", course_id)
+		isNewCourse = false
 	}
 
-	return course_id, true, nil
+	// Always ensure user is enrolled in user_progress when they import a course so it appears in "Your Courses"
+	_, _ = tx.Exec(`
+		INSERT INTO user_progress (user_id, course_id, completion_percentage, started_at, last_accessed_at)
+		VALUES ($1, $2, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		ON CONFLICT (user_id, course_id) DO UPDATE
+		SET last_accessed_at = CURRENT_TIMESTAMP
+	`, owner_id, course_id)
+
+	return course_id, isNewCourse, nil
 }
 
 // List of all Courses
 func List_my_courses(contxt context.Context, db *sql.DB, userID int) ([]models.Course_data, error) {
 
-	var reports []models.Course_data
+	reports := make([]models.Course_data, 0)
 	query := `SELECT  
 	courses.id,
 	courses.owner_id, 
@@ -74,15 +88,36 @@ func List_my_courses(contxt context.Context, db *sql.DB, userID int) ([]models.C
 	courses.title,
 	courses.ai_summary,
 	COALESCE(to_json(courses.course_tags), '[]'::json) AS course_tags,
-	COALESCE(user_progress.completion_percentage,0) AS completion_percentage,
+	COALESCE(user_progress.completion_percentage, 0) AS completion_percentage,
 	user_progress.started_at,
-	(user_progress.course_id IS NOT NULL) AS is_started
+	(user_progress.course_id IS NOT NULL) AS is_started,
+	(SELECT youtube_video_id FROM course_videos WHERE course_videos.course_id = courses.id ORDER BY index_order ASC LIMIT 1) AS first_video_id
               FROM courses
-			  LEFT JOIN user_progress ON courses.id=user_progress.course_id AND user_progress.user_id=$1
-              WHERE courses.owner_id = $1 AND courses.deleted_at IS NULL ;`
+			  LEFT JOIN user_progress ON courses.id = user_progress.course_id AND user_progress.user_id = $1
+              WHERE (courses.owner_id = $1 OR user_progress.user_id = $1) AND courses.deleted_at IS NULL
+              ORDER BY COALESCE(user_progress.started_at, courses.created_at, CURRENT_TIMESTAMP) DESC, courses.id DESC;`
 	rows, err := db.QueryContext(contxt, query, userID)
 	if err != nil {
-		return nil, err
+		// Fallback query if created_at column does not exist on courses
+		fallbackQuery := `SELECT  
+		courses.id,
+		courses.owner_id, 
+		courses.playlist_url, 
+		courses.title,
+		courses.ai_summary,
+		COALESCE(to_json(courses.course_tags), '[]'::json) AS course_tags,
+		COALESCE(user_progress.completion_percentage, 0) AS completion_percentage,
+		user_progress.started_at,
+		(user_progress.course_id IS NOT NULL) AS is_started,
+		(SELECT youtube_video_id FROM course_videos WHERE course_videos.course_id = courses.id ORDER BY index_order ASC LIMIT 1) AS first_video_id
+				  FROM courses
+				  LEFT JOIN user_progress ON courses.id = user_progress.course_id AND user_progress.user_id = $1
+				  WHERE (courses.owner_id = $1 OR user_progress.user_id = $1) AND courses.deleted_at IS NULL
+				  ORDER BY courses.id DESC;`
+		rows, err = db.QueryContext(contxt, fallbackQuery, userID)
+		if err != nil {
+			return nil, err
+		}
 	}
 	// The defer statement ensures that the rows are closed after the function completes, preventing resource leaks.
 	defer rows.Close()
@@ -98,7 +133,8 @@ func List_my_courses(contxt context.Context, db *sql.DB, userID int) ([]models.C
 		var percentageProgress sql.NullFloat64
 		var startedAt sql.NullTime
 		var isStarted bool
-		err := rows.Scan(&courseID, &ownerID, &url, &title, &summary, &tagsJSON, &percentageProgress, &startedAt, &isStarted)
+		var firstVideoID sql.NullString
+		err := rows.Scan(&courseID, &ownerID, &url, &title, &summary, &tagsJSON, &percentageProgress, &startedAt, &isStarted, &firstVideoID)
 		if err != nil {
 			return nil, err
 		}
@@ -125,10 +161,9 @@ func List_my_courses(contxt context.Context, db *sql.DB, userID int) ([]models.C
 			tmp := summary.String
 			item.Summary = &tmp
 		}
+		item.Tags = []string{}
 		if tagsJSON.Valid && tagsJSON.String != "" {
-			if err := json.Unmarshal([]byte(tagsJSON.String), &item.Tags); err != nil {
-				return nil, err
-			}
+			_ = json.Unmarshal([]byte(tagsJSON.String), &item.Tags)
 		}
 		if percentageProgress.Valid {
 			item.CompletionPercent = percentageProgress.Float64
@@ -137,6 +172,12 @@ func List_my_courses(contxt context.Context, db *sql.DB, userID int) ([]models.C
 			item.StartedAt = &startedAt.Time
 		}
 		item.IsStarted = isStarted
+		if firstVideoID.Valid && firstVideoID.String != "" {
+			vid := firstVideoID.String
+			item.FirstVideoID = &vid
+			thumb := fmt.Sprintf("https://img.youtube.com/vi/%s/hqdefault.jpg", vid)
+			item.ThumbnailURL = &thumb
+		}
 		reports = append(reports, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -146,26 +187,8 @@ func List_my_courses(contxt context.Context, db *sql.DB, userID int) ([]models.C
 }
 
 // Starting a course
-// this function is called when a user starts a course,
-// it inserts a new record into the user_progress table with the user ID, course ID, initial completion percentage (0), and timestamps for when the course was started and last accessed.
 func Start_course(contxt context.Context, tx *sql.Tx, userID, courseID int) error {
 	current_Time := time.Now()
-
-	var exists bool
-	err := tx.QueryRowContext(contxt, `
-		SELECT EXISTS (
-			SELECT 1
-			FROM user_progress
-			WHERE user_id = $1 AND course_id = $2
-		)
-	`, userID, courseID).Scan(&exists)
-	if err != nil {
-		return err
-	}
-	if exists {
-		log.Printf("Start skipped: User %d already enrolled in Course %d", userID, courseID)
-		return errors.New("blocked: user is already enrolled in this course")
-	}
 
 	query := `
 	INSERT INTO user_progress (user_id, course_id, completion_percentage, started_at, last_accessed_at)
@@ -173,48 +196,31 @@ func Start_course(contxt context.Context, tx *sql.Tx, userID, courseID int) erro
 	FROM users
 	WHERE id = $1 AND deleted_at IS NULL
 	AND EXISTS (SELECT 1 FROM courses WHERE id = $2 AND deleted_at IS NULL)
+	ON CONFLICT (user_id, course_id) DO UPDATE
+	SET last_accessed_at = EXCLUDED.last_accessed_at;
 	`
 
-	result, err := tx.ExecContext(contxt, query, userID, courseID, 0, current_Time, current_Time)
-	if err != nil {
-		return err
-	}
-
-	// Check the result
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-
-	// If rows == 0, it means EITHER the user is deleted, OR they already started this course.
-	// Both are safe states, so we don't necessarily need to return a fatal server error.
-	if rows == 0 {
-		return errors.New("blocked: user is deleted or course does not exist")
-		// You can choose to return an error here, or just return nil because the end result
-		// (the user being enrolled) is already true!
-	}
-
-	return nil
+	_, err := tx.ExecContext(contxt, query, userID, courseID, 0, current_Time, current_Time)
+	return err
 }
 
 func Delete_course(tx *sql.Tx, userID, CourseID int) error {
-	query := `UPDATE courses
-	            SET deleted_at=CURRENT_TIMESTAMP 
-				WHERE owner_id=$1 AND id=$2 AND deleted_at IS NULL
-				`
+	// 1. Check if user is the course owner
+	var isOwner bool
+	_ = tx.QueryRow("SELECT (owner_id = $1) FROM courses WHERE id = $2 AND deleted_at IS NULL", userID, CourseID).Scan(&isOwner)
 
-	result, err := tx.Exec(query, userID, CourseID)
+	if isOwner {
+		_, err := tx.Exec("UPDATE courses SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL", CourseID, userID)
+		if err != nil {
+			return err
+		}
+	}
 
-	if err != nil {
-		return err
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if rows == 0 {
-		return errors.New("Unauthorized or course not found")
-	}
+	// 2. Always remove this user's progress and video completion records for this course
+	// DELETION IMMUNITY: User's total_points in user_stats is permanent and NEVER deducted on deletion.
+	_, _ = tx.Exec("DELETE FROM user_progress WHERE user_id = $1 AND course_id = $2", userID, CourseID)
+	_, _ = tx.Exec("DELETE FROM course_video_progress WHERE user_id = $1 AND course_id = $2", userID, CourseID)
+
 	return nil
 }
 
@@ -231,7 +237,9 @@ func Fetch_IndiCourse(tx *sql.Tx, userID, courseID int) (*models.CourseViewerDat
         ON course_videos.youtube_video_id = course_video_progress.video_id 
 		AND course_video_progress.course_id = courses.id
         AND course_video_progress.user_id = $2
-	WHERE courses.id = $1 AND courses.deleted_at IS NULL
+	WHERE courses.id = $1 
+	  AND (courses.owner_id = $2 OR EXISTS (SELECT 1 FROM user_progress WHERE user_progress.user_id = $2 AND user_progress.course_id = $1))
+	  AND courses.deleted_at IS NULL
 	ORDER BY course_videos.index_order ASC;
 `
 
@@ -241,8 +249,11 @@ func Fetch_IndiCourse(tx *sql.Tx, userID, courseID int) (*models.CourseViewerDat
 	}
 	defer result.Close()
 
-	courseData := &models.CourseViewerData{}
+	courseData := &models.CourseViewerData{
+		VideoInfo: make([]models.VideoData, 0),
+	}
 	foundCourse := false
+	seenVideoIDs := make(map[string]bool)
 
 	for result.Next() {
 		var title, summary sql.NullString
@@ -264,21 +275,25 @@ func Fetch_IndiCourse(tx *sql.Tx, userID, courseID int) (*models.CourseViewerDat
 		if summary.Valid {
 			courseData.Summary = summary.String
 		}
-		if videoID.Valid {
-			video := models.VideoData{
-				VideoId: videoID.String,
-				Status:  isCompleted,
+		if videoID.Valid && videoID.String != "" {
+			vID := videoID.String
+			if !seenVideoIDs[vID] {
+				seenVideoIDs[vID] = true
+				dur := "10:00"
+				if duration.Valid && strings.TrimSpace(duration.String) != "" && strings.TrimSpace(duration.String) != "TBD" {
+					dur = strings.TrimSpace(duration.String)
+				}
+				video := models.VideoData{
+					VideoId:  vID,
+					Status:   isCompleted,
+					Duration: dur,
+					Index:    len(courseData.VideoInfo) + 1, // Clean sequential 1-based index
+				}
+				if videoTitle.Valid {
+					video.VideoTitle = videoTitle.String
+				}
+				courseData.VideoInfo = append(courseData.VideoInfo, video)
 			}
-			if videoTitle.Valid {
-				video.VideoTitle = videoTitle.String
-			}
-			if duration.Valid {
-				video.Duration = duration.String
-			}
-			if videoIndex.Valid {
-				video.Index = int(videoIndex.Int64)
-			}
-			courseData.VideoInfo = append(courseData.VideoInfo, video)
 		}
 	}
 	if err := result.Err(); err != nil {
@@ -291,19 +306,45 @@ func Fetch_IndiCourse(tx *sql.Tx, userID, courseID int) (*models.CourseViewerDat
 }
 
 func Insert_course_videos(tx *sql.Tx, courseID int, vd []models.VideoData) error {
+	// First clean existing video list for this course to prevent duplication
+	_, _ = tx.Exec("DELETE FROM course_videos WHERE course_id = $1", courseID)
+
 	query := `INSERT INTO course_videos(course_id,youtube_video_id,title,index_order,duration)
 	        VALUES($1,$2,$3,$4,$5)
 			`
+	seen := make(map[string]bool)
+	idx := 1
 	for _, vid := range vd {
-		_, err := tx.Exec(query, courseID, vid.VideoId, vid.VideoTitle, vid.Index, vid.Duration)
+		if vid.VideoId == "" || seen[vid.VideoId] {
+			continue
+		}
+		seen[vid.VideoId] = true
+		duration := strings.TrimSpace(vid.Duration)
+		if duration == "" || duration == "TBD" {
+			duration = "10:00"
+		}
+		_, err := tx.Exec(query, courseID, vid.VideoId, vid.VideoTitle, idx, duration)
 		if err != nil {
 			return err
 		}
+		idx++
 	}
 	return nil
 }
 
-func Insert_Video_Progress(tx *sql.Tx, userID int, courseID int, videoID string) error {
+func Insert_Video_Progress(tx *sql.Tx, userID int, courseID int, videoID string) (bool, error) {
+	var alreadyViewed bool
+	err := tx.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM course_video_progress
+			WHERE user_id = $1 AND course_id = $2 AND video_id = $3
+		)`, userID, courseID, videoID).Scan(&alreadyViewed)
+	if err != nil {
+		return false, err
+	}
+	if alreadyViewed {
+		return false, nil
+	}
 	query := `
 		INSERT INTO course_video_progress (user_id, course_id, video_id)
 		SELECT $1, $2, $3
@@ -326,15 +367,15 @@ func Insert_Video_Progress(tx *sql.Tx, userID int, courseID int, videoID string)
 
 	result, err := tx.Exec(query, userID, courseID, videoID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return false, err
 	}
 	if rows == 0 {
-		return errors.New("blocked: user, course, or video is invalid")
+		return false, errors.New("blocked: user, course, or video is invalid")
 	}
 
-	return nil
+	return true, nil
 }
