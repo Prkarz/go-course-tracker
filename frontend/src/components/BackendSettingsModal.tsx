@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api, getApiBaseUrl, setApiBaseUrl } from '../services/api';
+import { api, getApiBaseUrl, setApiBaseUrl, DEFAULT_API_BASE_URL } from '../services/api';
 import { useNotification } from '../context/NotificationContext';
 import {
   X,
@@ -46,21 +46,21 @@ export const BackendSettingsModal: React.FC<BackendSettingsModalProps> = ({
     if (res.ok) {
       addToast('Backend Connected', `Go server responding in ${res.latency}ms`, 'success');
     } else {
-      addToast('Backend Unreachable', 'Ensure your Go backend is running on this port.', 'error');
+      addToast('Backend Unreachable', 'Ensure your Go backend is running and reachable.', 'error');
     }
   };
 
   const handleSave = () => {
     setApiBaseUrl(apiUrl);
-    addToast('Settings Saved', `API Base URL set to ${apiUrl}`, 'success');
+    addToast('Settings Saved', `API Base URL set to ${apiUrl || DEFAULT_API_BASE_URL}`, 'success');
     onClose();
   };
 
   const handleReset = () => {
     setApiBaseUrl('');
-    setApiUrl('http://localhost:8080');
+    setApiUrl(DEFAULT_API_BASE_URL);
     setTestResult({ ok: false, latency: 0, tested: false });
-    addToast('Reset', 'API Base URL reset to default (http://localhost:8080)', 'info');
+    addToast('Reset', `API Base URL reset to default (${DEFAULT_API_BASE_URL})`, 'info');
   };
 
   return (
@@ -82,7 +82,7 @@ export const BackendSettingsModal: React.FC<BackendSettingsModalProps> = ({
               Backend API Configuration
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Connect frontend to your Go backend instance.
+              Connect frontend to your Go backend instance (uses /api by default for same host).
             </p>
           </div>
         </div>
@@ -99,7 +99,7 @@ export const BackendSettingsModal: React.FC<BackendSettingsModalProps> = ({
                 setApiUrl(e.target.value);
                 setTestResult({ ok: false, latency: 0, tested: false });
               }}
-              placeholder="http://localhost:8080"
+              placeholder="/api (default) or http://localhost:8080"
               className="flex-1 px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-500 text-sm font-mono focus:outline-none focus:border-sky-500 transition-all"
             />
             <button

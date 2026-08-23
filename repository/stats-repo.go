@@ -16,6 +16,12 @@ func Get_user_stats(db *sql.DB, userID int) (models.User_stats, error) {
 		SELECT user_id, COALESCE(streak_count, 0), COALESCE(total_points, 0), last_active_date
 		FROM user_stats
 		WHERE user_id = $1`, userID).Scan(&stats.User_id, &stats.Streak_count, &stats.Total_points, &lastActive)
+	if err == sql.ErrNoRows {
+		// Auto-initialize stats if row does not exist yet
+		_, _ = db.Exec("INSERT INTO user_stats (user_id, streak_count, total_points, last_active_date) VALUES ($1, 0, 0, NULL) ON CONFLICT (user_id) DO NOTHING", userID)
+		stats.User_id = userID
+		return stats, nil
+	}
 	if err != nil {
 		return stats, err
 	}

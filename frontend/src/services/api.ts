@@ -18,7 +18,7 @@ const STORAGE_KEYS = {
   USER_INFO: 'course_tracker_user_info',
 };
 
-const DEFAULT_API_BASE_URL = '/api';
+export const DEFAULT_API_BASE_URL = '/api';
 
 export function getApiBaseUrl(): string {
   const customUrl = localStorage.getItem(STORAGE_KEYS.API_BASE_URL);
@@ -29,11 +29,38 @@ export function getApiBaseUrl(): string {
 }
 
 export function setApiBaseUrl(url: string): void {
-  if (!url || url.trim() === '') {
+  if (!url || url.trim() === '' || url.trim() === '/api') {
     localStorage.removeItem(STORAGE_KEYS.API_BASE_URL);
   } else {
     localStorage.setItem(STORAGE_KEYS.API_BASE_URL, url.trim().replace(/\/+$/, ''));
   }
+}
+
+export function resolveApiUrl(endpoint: string): string {
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const baseUrl = getApiBaseUrl();
+
+  // If baseUrl is default relative '/api' or empty or '/'
+  if (baseUrl === '/api' || baseUrl === '' || baseUrl === '/') {
+    if (cleanEndpoint.startsWith('/api/')) {
+      return cleanEndpoint;
+    }
+    return `/api${cleanEndpoint}`;
+  }
+
+  // If baseUrl is an absolute URL or custom base ending with /api
+  if (baseUrl.endsWith('/api')) {
+    if (cleanEndpoint.startsWith('/api/')) {
+      return `${baseUrl.slice(0, -4)}${cleanEndpoint}`;
+    }
+    return `${baseUrl}${cleanEndpoint}`;
+  }
+
+  // If baseUrl is http://localhost:8080 or https://backend.com (without /api)
+  if (cleanEndpoint.startsWith('/api/')) {
+    return `${baseUrl}${cleanEndpoint}`;
+  }
+  return `${baseUrl}/api${cleanEndpoint}`;
 }
 
 export function getStoredToken(): string | null {
@@ -51,7 +78,10 @@ export function removeStoredToken(): void {
 
 export function parseJwt(token: string): { user_id?: number; exp?: number } | null {
   try {
-    const base64Url = token.split('.')[1];
+    const cleanToken = token.trim().replace(/^"|"$/g, '');
+    const parts = cleanToken.split('.');
+    if (parts.length < 2) return null;
+    const base64Url = parts[1];
     if (!base64Url) return null;
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
     const jsonPayload = decodeURIComponent(
@@ -84,7 +114,6 @@ async function request<T>(
   options: RequestInit = {},
   isTextResponse = false
 ): Promise<T> {
-  const baseUrl = getApiBaseUrl();
   const token = getStoredToken();
 
   const headers: Record<string, string> = {
@@ -93,13 +122,12 @@ async function request<T>(
   };
 
   if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+    headers['Authorization'] = `Bearer ${token.trim().replace(/^"|"$/g, '')}`;
   }
 
-  const url = `${baseUrl}${endpoint}`;
+  const finalUrl = resolveApiUrl(endpoint);
 
   try {
-    const finalUrl = url.startsWith('/api') ? url : `/api${url.startsWith('/') ? '' : '/'}${url}`;
     const response = await fetch(finalUrl, {
       ...options,
       headers,
@@ -120,7 +148,9 @@ async function request<T>(
       } catch {
         try {
           const text = await response.text();
-          if (text) errorMessage = text;
+          if (text && !text.startsWith('<!DOCTYPE') && !text.startsWith('<html')) {
+            errorMessage = text;
+          }
         } catch {
           // ignore
         }
@@ -146,7 +176,7 @@ async function request<T>(
     }
     const message = err instanceof Error ? err.message : 'Network error or server unreachable';
     throw new ApiError(
-      `${message}. Please verify the Go backend is running at ${baseUrl}.`,
+      `${message}. (Endpoint: ${finalUrl})`,
       'NETWORK_ERROR',
       0
     );
@@ -265,21 +295,21 @@ export const api = {
 
   // Health check
   async checkBackendHealth(): Promise<{ ok: boolean; latency: number; url: string }> {
-    const baseUrl = getApiBaseUrl();
+    const healthUrl = resolveApiUrl('/stats/me');
     const start = performance.now();
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-      const res = await fetch(`${baseUrl}/stats/me`, {
+      const res = await fetch(healthUrl, {
         method: 'OPTIONS',
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
       const latency = Math.round(performance.now() - start);
-      return { ok: res.status < 500, latency, url: baseUrl };
+      return { ok: res.status < 500, latency, url: healthUrl };
     } catch {
-      return { ok: false, latency: 0, url: baseUrl };
+      return { ok: false, latency: 0, url: healthUrl };
     }
   },
 };

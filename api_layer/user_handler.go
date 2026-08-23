@@ -114,6 +114,8 @@ func (s *APIServer) User_Login_Handler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "500_TOKEN_GENERATION_FAILED", "Token generation failed. Please try logging in again.")
 		return
 	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(tokenString))
 }
 

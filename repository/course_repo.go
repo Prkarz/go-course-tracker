@@ -12,16 +12,73 @@ import (
 	"github.com/Prkarz/course-tracker/models"
 )
 
-func EnsureCourseVideoProgressTable(db *sql.DB) error {
-	_, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS course_video_progress (
-			user_id INTEGER NOT NULL,
-			course_id INTEGER NOT NULL,
-			video_id TEXT NOT NULL,
-			is_completed BOOLEAN NOT NULL DEFAULT TRUE,
-			PRIMARY KEY (user_id, course_id, video_id)
-		)`)
+func EnsureAllTables(db *sql.DB) error {
+	schema := `
+	CREATE TABLE IF NOT EXISTS users (
+		id SERIAL PRIMARY KEY,
+		username TEXT NOT NULL,
+		email TEXT UNIQUE NOT NULL,
+		password_hash TEXT NOT NULL,
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+		deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS courses (
+		id SERIAL PRIMARY KEY,
+		owner_id INTEGER REFERENCES users(id),
+		playlist_url TEXT UNIQUE NOT NULL,
+		title TEXT NOT NULL,
+		ai_summary TEXT,
+		course_tags TEXT[] DEFAULT '{}',
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+		deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS course_videos (
+		id SERIAL PRIMARY KEY,
+		course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE,
+		youtube_video_id TEXT NOT NULL,
+		title TEXT,
+		index_order INTEGER DEFAULT 1,
+		duration TEXT DEFAULT '10:00'
+	);
+
+	CREATE TABLE IF NOT EXISTS user_progress (
+		user_id INTEGER REFERENCES users(id),
+		course_id INTEGER REFERENCES courses(id),
+		completion_percentage FLOAT DEFAULT 0,
+		started_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+		last_accessed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (user_id, course_id)
+	);
+
+	CREATE TABLE IF NOT EXISTS user_stats (
+		user_id INTEGER PRIMARY KEY REFERENCES users(id),
+		streak_count INTEGER DEFAULT 0,
+		total_points INTEGER DEFAULT 0,
+		last_active_date DATE
+	);
+
+	CREATE TABLE IF NOT EXISTS course_video_progress (
+		user_id INTEGER NOT NULL,
+		course_id INTEGER NOT NULL,
+		video_id TEXT NOT NULL,
+		is_completed BOOLEAN NOT NULL DEFAULT TRUE,
+		PRIMARY KEY (user_id, course_id, video_id)
+	);
+
+	ALTER TABLE courses ADD COLUMN IF NOT EXISTS ai_summary TEXT;
+	ALTER TABLE courses ADD COLUMN IF NOT EXISTS course_tags TEXT[] DEFAULT '{}';
+	ALTER TABLE courses ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL;
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL;
+	ALTER TABLE course_videos ADD COLUMN IF NOT EXISTS duration TEXT DEFAULT '10:00';
+	`
+	_, err := db.Exec(schema)
 	return err
+}
+
+func EnsureCourseVideoProgressTable(db *sql.DB) error {
+	return EnsureAllTables(db)
 }
 
 // Creating a Course
