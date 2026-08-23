@@ -38,7 +38,7 @@ func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func main() {
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatalf("%v", err)
+		log.Println("No .env file found, reading from system environment variables")
 	}
 	// Database connection string
 	connStr := os.Getenv("DB_URL")
