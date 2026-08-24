@@ -92,7 +92,7 @@ func (s *APIServer) User_Login_Handler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "400_INVALID_REQUEST", "Email and password are required.")
 		return
 	}
-	userID, err := service.LoginUser(s.DB, req.Email, req.Password)
+	userID, username, err := service.LoginUser(s.DB, req.Email, req.Password)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "401_AUTH_FAILED", "Invalid email or password.")
 		return
@@ -103,8 +103,10 @@ func (s *APIServer) User_Login_Handler(w http.ResponseWriter, r *http.Request) {
 
 	secret_key := string(config.GetJWTSecret())
 	claims := jwt.MapClaims{
-		"user_id": userID,
-		"exp":     time.Now().Add(config.JWTExpiryDuration).Unix(),
+		"user_id":  userID,
+		"username": username,
+		"email":    req.Email,
+		"exp":      time.Now().Add(config.JWTExpiryDuration).Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 

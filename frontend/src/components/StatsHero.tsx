@@ -60,7 +60,7 @@ export const StatsHero: React.FC<StatsHeroProps> = ({
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight leading-tight">
             Keep crushing your goals,{' '}
             <span className="text-brand-400">
-              {user?.email?.split('@')[0] || 'Learner'}!
+              {user?.username || user?.email?.split('@')[0] || 'Learner'}!
             </span>
           </h1>
 

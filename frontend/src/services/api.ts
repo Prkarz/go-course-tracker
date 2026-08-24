@@ -76,7 +76,7 @@ export function removeStoredToken(): void {
   localStorage.removeItem(STORAGE_KEYS.USER_INFO);
 }
 
-export function parseJwt(token: string): { user_id?: number; exp?: number } | null {
+export function parseJwt(token: string): { user_id?: number; username?: string; email?: string; exp?: number } | null {
   try {
     const cleanToken = token.trim().replace(/^"|"$/g, '');
     const parts = cleanToken.split('.');
@@ -208,7 +208,8 @@ export const api = {
     const claims = parseJwt(cleanToken);
     const session: UserSession = {
       userId: claims?.user_id || 0,
-      email: data.email,
+      username: claims?.username,
+      email: claims?.email || data.email,
       token: cleanToken,
       exp: claims?.exp,
     };

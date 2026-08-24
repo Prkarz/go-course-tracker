@@ -61,6 +61,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const storedUser = localStorage.getItem('course_tracker_user_info');
         let sessionData: UserSession = {
           userId: claims.user_id || 0,
+          username: claims.username,
+          email: claims.email,
           token: rawToken,
           exp: claims.exp,
         };
@@ -90,7 +92,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(session.token);
       setIsAuthModalOpen(false);
       await refreshStats();
-      addToast('Welcome back! ⚡', `Logged in as ${data.email} (+50 Daily Login XP awarded)`, 'reward', 50);
+      addToast('Welcome back! ⚡', `Logged in as ${session.username || data.email} (+50 Daily Login XP awarded)`, 'reward', 50);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Login failed';
       throw new Error(msg);

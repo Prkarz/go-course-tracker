@@ -19,16 +19,15 @@ func Register_user(db *sql.Tx, username, email, plain_password string) (int, boo
 	}
 	return userID, isNewOrReactivated, isReactivated, nil
 }
-func LoginUser(db *sql.DB, email string, typedPassword string) (int, error) {
-	UserID, password, err := repository.Login_User_byemail(db, email)
+func LoginUser(db *sql.DB, email string, typedPassword string) (int, string, error) {
+	UserID, username, password, err := repository.Login_User_byemail(db, email)
 	if err != nil {
-		return 0, err
+		return 0, "", err
 	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(password), []byte(typedPassword))
 	if err != nil {
-		return 0, repository.ErrInvalidCredentials
+		return 0, "", repository.ErrInvalidCredentials
 	}
-	return UserID, nil
-    
+	return UserID, username, nil
 }

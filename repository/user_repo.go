@@ -64,20 +64,21 @@ func Create_user(tx *sql.Tx, username, email, passwordHash string) (int, bool, e
 	return id, isNewOrReactivated, err
 }
 
-func Login_User_byemail(db *sql.DB, email string) (int, string, error) {
+func Login_User_byemail(db *sql.DB, email string) (int, string, string, error) {
 	var resultID int
+	var username string
 	var password string
-	query := `SELECT id , password_hash FROM users
+	query := `SELECT id, username, password_hash FROM users
 	        WHERE email=$1  AND deleted_at IS NULL `
 
-	err := db.QueryRow(query, email).Scan(&resultID, &password)
+	err := db.QueryRow(query, email).Scan(&resultID, &username, &password)
 	if err == sql.ErrNoRows {
-		return 0, "", ErrInvalidCredentials
+		return 0, "", "", ErrInvalidCredentials
 	}
 	if err != nil {
-		return 0, "", err
+		return 0, "", "", err
 	}
-	return resultID, password, nil
+	return resultID, username, password, nil
 }
 
 // RowsAffected is used to determine how many rows were affected by the delete operation.

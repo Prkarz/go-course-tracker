@@ -186,7 +186,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                     className="flex items-center gap-2 p-1.5 rounded-xl border border-slate-700 bg-slate-900/80 hover:border-slate-600 transition-colors"
                   >
                     <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-accent-500 to-brand-400 flex items-center justify-center font-bold text-xs text-slate-950">
-                      {user?.email ? user.email.charAt(0).toUpperCase() : 'U'}
+                      {user?.username
+                        ? user.username.charAt(0).toUpperCase()
+                        : user?.email
+                        ? user.email.charAt(0).toUpperCase()
+                        : 'U'}
                     </div>
                   </button>
 
@@ -199,8 +203,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <div className="px-4 py-3 border-b border-slate-800">
                         <p className="text-xs font-medium text-slate-400">Signed in as</p>
                         <p className="text-sm font-bold text-slate-100 truncate mt-0.5">
-                          {user?.email || 'Learner'}
+                          {user?.username || user?.email || 'Learner'}
                         </p>
+                        {user?.username && user?.email && (
+                          <p className="text-xs text-slate-400 truncate mt-0.5">
+                            {user.email}
+                          </p>
+                        )}
                         <p className="text-[11px] text-brand-400 font-medium mt-1">
                           User ID #{user?.userId || 0}
                         </p>
